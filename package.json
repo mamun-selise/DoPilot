@@ -13,6 +13,7 @@
     "build:prodshadow": "vite build --mode prodshadow && node scripts/write-release-env.mjs prodshadow",
     "build:prod": "vite build --mode prod && node scripts/write-release-env.mjs prod",
     "cert": "node scripts/generate-cert.mjs",
+    "pack:kora": "node scripts/pack-kora.mjs",
     "dev": "vite",
     "lint": "tsc --noEmit",
     "preview": "vite preview"

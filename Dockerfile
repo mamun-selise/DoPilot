@@ -30,7 +30,8 @@ ENV VITE_BLOCKS_REDIRECT_URI=${VITE_BLOCKS_REDIRECT_URI}
 ENV VITE_BLOCKS_HOSTED_LOGIN=${VITE_BLOCKS_HOSTED_LOGIN}
 
 RUN NODE_OPTIONS="--max-old-space-size=4096" npx vite build --mode "${ci_build}" \
-  && node scripts/write-release-env.mjs "${ci_build}"
+  && node scripts/write-release-env.mjs "${ci_build}" \
+  && node scripts/pack-kora.mjs
 
 FROM nginxinc/nginx-unprivileged:1.29-alpine
 
