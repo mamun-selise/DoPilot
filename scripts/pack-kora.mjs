@@ -25,7 +25,8 @@ try {
     iamUrl: env("VITE_BLOCKS_OIDC_URL"),
     tenantId: env("VITE_BLOCKS_X_BLOCKS_KEY"),
     clientId: env("KORA_CLI_CLIENT_ID"),
-    hubUrl: env("VITE_KORA_HUB_URL")
+    // The api/ service hosts the hub on the app's own domain unless VITE_KORA_HUB_URL says otherwise.
+    hubUrl: env("VITE_KORA_HUB_URL") || `${appDomain}/hubs/runners`
   };
   for (const [key, value] of Object.entries(settings)) if (!value) console.warn(`pack-kora: ${key} is empty; kora will need it from the environment.`);
   writeFileSync(join(stage, "source.json"), JSON.stringify(settings, null, 2) + "\n");

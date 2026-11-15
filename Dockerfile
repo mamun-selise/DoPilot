@@ -37,13 +37,19 @@ RUN NODE_OPTIONS="--max-old-space-size=4096" npx vite build --mode "${ci_build}"
   && node scripts/write-release-env.mjs "${ci_build}" \
   && node scripts/pack-kora.mjs
 
-FROM nginxinc/nginx-unprivileged:1.29-alpine
+# KORA backend (api/): serves the built web app from wwwroot, the KORA CLI tarballs and the runners hub.
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS api
+WORKDIR /src
+COPY api/DoPilot.Api.csproj api/
+RUN dotnet restore api/DoPilot.Api.csproj
+COPY api/ api/
+RUN dotnet publish api/DoPilot.Api.csproj -c Release -o /out --no-restore
 
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+WORKDIR /app
+COPY --from=api /out .
+COPY --from=builder /app/dist ./wwwroot
+ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
-
-# HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-#   CMD wget -qO- http://localhost:8080/ || exit 1
+USER $APP_UID
+ENTRYPOINT ["dotnet", "DoPilot.Api.dll"]

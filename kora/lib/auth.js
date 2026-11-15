@@ -44,7 +44,10 @@ export function logout() {
 }
 
 export function session() {
-  return readJson(paths.credentials);
+  const current = readJson(paths.credentials);
+  // Sessions saved before ids were canonicalized may still hold "blocks|<id>".
+  if (current?.user?.sub) current.user.sub = canonicalId(current.user.sub);
+  return current;
 }
 
 // A valid access token, refreshed when it is about to expire. Throws when there is no usable session.
@@ -66,12 +69,19 @@ export async function accessToken() {
 
 function save(token, previousRefreshToken) {
   const claims = decodeJwt(token.id_token) ?? decodeJwt(token.access_token) ?? {};
+  const access = decodeJwt(token.access_token) ?? {};
+  const previous = session()?.user ?? {};
   const value = {
     accessToken: token.access_token,
     refreshToken: token.refresh_token || previousRefreshToken || null,
     expiresAt: Date.now() + (token.expires_in || 300) * 1000,
     tenantId: source.tenantId,
-    user: { sub: claims.sub, email: claims.email, name: claims.name || claims.preferred_username }
+    user: {
+      sub: canonicalId(access.sub ?? claims.sub, access.user_id ?? claims.user_id),
+      // A refreshed token may come without an id_token; keep what login learned.
+      email: claims.email ?? previous.email,
+      name: claims.name || claims.preferred_username || previous.name
+    }
   };
   writePrivateJson(paths.credentials, value);
   return value;
@@ -98,6 +108,12 @@ async function postForm(url, body) {
   } catch {
     return { error: `http_${res.status}`, error_description: text.slice(0, 200) };
   }
+}
+
+// One id per person, matching the backend: IAM's `sub` is the bare user id on a device-code token but
+// "blocks|<id>" on a refreshed one, so prefer `user_id` and otherwise strip the "provider|" prefix.
+function canonicalId(sub, userId) {
+  return userId || (sub ? sub.slice(sub.lastIndexOf("|") + 1) : sub);
 }
 
 function decodeJwt(token) {
