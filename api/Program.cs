@@ -65,6 +65,30 @@ app.UseAuthorization();
 
 app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
 app.MapGet("/api/runners", (RunnerRegistry registry) => registry.List()).RequireAuthorization();
+// Diagnoses the Runners page's sign-in: which cookie NAMES reach this service (never values) and what IAM answers
+// with and without the app's origin. Open it in the signed-in browser.
+app.MapGet("/api/session/diagnose", async (HttpRequest request, IHttpClientFactory http, KoraOptions options) =>
+{
+    var cookies = request.Headers.Cookie.ToString();
+    var names = cookies.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(cookie => cookie.Split('=', 2)[0]).ToArray();
+    async Task<object> Ask(string? origin)
+    {
+        if (names.Length == 0) return "no cookies";
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var response = await BlocksSessionHandler.CallMeAsync(http, options, cookies, origin, timeout.Token);
+            return (int)response.StatusCode;
+        }
+        catch (Exception error)
+        {
+            return error.Message;
+        }
+    }
+    var origin = BlocksSessionHandler.AppOrigin(request, options);
+    return Results.Ok(new { cookieNames = names, origin, iamWithOrigin = await Ask(origin), iamWithoutOrigin = await Ask(null) });
+});
 app.MapHub<RunnersHub>("/hubs/runners");
 // `npm i -g https://<domain>/kora` installs the latest CLI tarball.
 app.MapGet("/kora", (IWebHostEnvironment env, HttpResponse response) =>

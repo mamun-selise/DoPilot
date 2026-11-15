@@ -52,11 +52,12 @@ public sealed class BlocksSessionHandler(
         try
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"{kora.ApiUrl}/iam/v4/auth/me");
-            request.Headers.Add("Cookie", cookies);
-            request.Headers.Add("x-blocks-key", kora.TenantId);
-            using var response = await http.CreateClient().SendAsync(request, timeout.Token);
-            if (!response.IsSuccessStatusCode) return null;
+            using var response = await CallMeAsync(http, kora, cookies, AppOrigin(Request, kora), timeout.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                Logger.LogWarning("IAM rejected the browser session: {Status}", (int)response.StatusCode);
+                return null;
+            }
 
             using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(timeout.Token));
             var root = json.RootElement;
@@ -73,6 +74,30 @@ public sealed class BlocksSessionHandler(
             Logger.LogWarning("Blocks session check failed: {Error}", error.Message);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Calls IAM's auth/me with the browser's cookies, as the browser itself would: IAM picks the session cookie by
+    /// the calling app's origin, so the web app's Origin/Referer go along (null sends neither).
+    /// </summary>
+    public static Task<HttpResponseMessage> CallMeAsync(IHttpClientFactory http, KoraOptions kora, string cookies, string? origin, CancellationToken cancellation)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, $"{kora.ApiUrl}/iam/v4/auth/me");
+        request.Headers.Add("Cookie", cookies);
+        request.Headers.Add("x-blocks-key", kora.TenantId);
+        if (origin is not null)
+        {
+            request.Headers.Add("Origin", origin);
+            request.Headers.Referrer = new Uri($"{origin}/");
+        }
+        return http.CreateClient().SendAsync(request, cancellation);
+    }
+
+    /// <summary>The web app's origin: the browser's own Origin header when it sent one, else the configured app domain.</summary>
+    public static string AppOrigin(HttpRequest request, KoraOptions kora)
+    {
+        var origin = request.Headers.Origin.ToString();
+        return kora.AllowedOrigins.Contains(origin) ? origin : kora.Audiences[0].TrimEnd('/');
     }
 
     private static string? Text(JsonElement root, string name) =>
