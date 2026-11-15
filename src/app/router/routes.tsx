@@ -6,9 +6,11 @@ import { ErrorPage } from "../../features/auth/ErrorPage";
 import { LoginPage } from "../../features/auth/LoginPage";
 import { NotFoundPage } from "../../features/auth/NotFoundPage";
 import { ProfilePage } from "../../features/profile/ProfilePage";
+import { RunnersPage } from "../../features/runners/RunnersPage";
 
 const protectedRoutes = {
   "/": ProfilePage,
+  "/runners": RunnersPage,
   "/error": ErrorPage
 };
 

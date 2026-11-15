@@ -25,7 +25,7 @@ try {
     iamUrl: env("VITE_BLOCKS_OIDC_URL"),
     tenantId: env("VITE_BLOCKS_X_BLOCKS_KEY"),
     clientId: env("KORA_CLI_CLIENT_ID"),
-    hubUrl: env("KORA_HUB_URL")
+    hubUrl: env("VITE_KORA_HUB_URL")
   };
   for (const [key, value] of Object.entries(settings)) if (!value) console.warn(`pack-kora: ${key} is empty; kora will need it from the environment.`);
   writeFileSync(join(stage, "source.json"), JSON.stringify(settings, null, 2) + "\n");
