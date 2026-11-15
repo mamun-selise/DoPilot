@@ -1,7 +1,7 @@
 // `kora start`: keep an outbound SignalR connection to the KORA backend and run the tasks it sends.
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, execSync, spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
-import { hostname } from "node:os";
+import { arch, hostname, release } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import * as signalR from "@microsoft/signalr";
@@ -40,14 +40,26 @@ export async function start() {
     }
   });
 
+  const claudeVersion = run("claude --version")?.split(" ")[0] ?? null;
+  // Re-read on every (re)connect so the Runners page shows each clone's current branch.
   const register = () =>
     connection.invoke("RegisterRunner", {
       name: runner.name,
       machine: hostname(),
       version: pkg.version,
-      repos: Object.entries(runner.repos ?? {}).map(([key, repo]) => ({ key, github: repo.github ?? null })),
+      repos: Object.entries(runner.repos ?? {}).map(([key, repo]) => ({
+        key,
+        github: repo.github ?? null,
+        branch: repo.path ? run(`git -C "${repo.path}" rev-parse --abbrev-ref HEAD`) : null
+      })),
       agents: Object.keys(runner.agents ?? {}).filter((key) => runner.agents[key]?.enabled),
-      concurrency
+      concurrency,
+      platform: `${{ win32: "Windows", darwin: "macOS", linux: "Linux" }[process.platform] ?? process.platform} ${release()} (${arch()})`,
+      nodeVersion: process.version,
+      claudeVersion,
+      githubAccount: runner.github?.account ?? null,
+      allowBinaries: runner.exec?.allowBinaries ?? [],
+      dispatchAccept: (runner.dispatch?.accept ?? []).flatMap((rule) => rule.from ?? [])
     });
   connection.onreconnecting(() => console.log("Connection lost, reconnecting..."));
   connection.onreconnected(async () => {
@@ -146,6 +158,14 @@ function summarize(line) {
   const tools = parts.filter((part) => part.type === "tool_use").map((part) => ({ name: part.name, input: shorten(part.input) }));
   if (!text && !tools.length) return null;
   return { kind: "assistant", text: text || null, tools };
+}
+
+function run(command) {
+  try {
+    return execSync(command, { stdio: ["ignore", "pipe", "ignore"], encoding: "utf8" }).trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 function shorten(input) {

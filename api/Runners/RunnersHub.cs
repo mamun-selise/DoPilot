@@ -44,7 +44,11 @@ public sealed class RunnersHub(RunnerRegistry registry, UserDirectory users, ILo
         await BroadcastRunners();
     }
 
-    public Task TaskStarted(string taskId, JsonElement info) => Report(taskId, KoraTaskState.Running, "TaskStarted", info);
+    public async Task TaskStarted(string taskId, JsonElement info)
+    {
+        await Report(taskId, KoraTaskState.Running, "TaskStarted", info);
+        await BroadcastRunners(); // the Runners page shows what each runner is working on
+    }
 
     public Task TaskLog(string taskId, JsonElement entry) => Report(taskId, null, "TaskLog", entry);
 
@@ -94,7 +98,7 @@ public sealed class RunnersHub(RunnerRegistry registry, UserDirectory users, ILo
         var task = registry.Task(taskId) ?? throw new HubException("Unknown task.");
         var runner = registry.ByConnection(Context.ConnectionId);
         if (runner is null || runner.Id != task.RunnerId) throw new HubException("This connection is not running that task.");
-        if (state is not null) task.State = state.Value;
+        if (state is not null) task.MoveTo(state.Value);
         await Clients.Group(UserGroup(task.From.Sub)).SendAsync(method, taskId, payload);
     }
 

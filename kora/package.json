@@ -1,6 +1,6 @@
 {
   "name": "@dopilot/kora",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "KORA local runner: connects this machine's Claude Code to the DoPilot web app.",
   "type": "module",
   "bin": {

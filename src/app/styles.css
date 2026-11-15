@@ -98,6 +98,7 @@ aside.collapsed nav a:hover::before {
 .topbar-spacer { flex: 1; }
 main { flex: 1; min-height: 0; overflow-y: auto; padding: 32px; }
 section { margin: 0 auto; max-width: 1100px; width: 100%; }
+section.wide { max-width: none; }
 
 .page-header { align-items: flex-start; display: flex; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
 .page-header h2 { font-size: 28px; font-weight: 700; margin: 0 0 6px; }
@@ -135,7 +136,24 @@ section { margin: 0 auto; max-width: 1100px; width: 100%; }
 .avatar-lg { box-shadow: 0 0 0 3px hsl(var(--background)), 0 0 0 4px hsl(var(--border)); font-size: 20px; height: 56px; width: 56px; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip { background: hsl(var(--secondary)); border-radius: 999px; color: hsl(var(--accent-foreground)); font-size: 12px; font-weight: 600; padding: 5px 11px; }
+.chip { align-items: center; background: hsl(var(--secondary)); border-radius: 999px; color: hsl(var(--accent-foreground)); display: inline-flex; font-size: 12px; font-weight: 600; gap: 5px; padding: 5px 11px; white-space: nowrap; }
+
+/* Runners page */
+.runners-table td { vertical-align: top; }
+.runners-table .runner-expand { width: 36px; }
+.runner-stack { display: grid; gap: 4px; }
+.runner-stack .muted { font-size: 12px; }
+.runner-repo { align-items: center; display: flex; flex-wrap: wrap; gap: 6px; font-size: 13px; }
+.runner-repo a { color: hsl(var(--primary)); font-weight: 600; text-decoration: none; }
+.runner-repo a:hover { text-decoration: underline; }
+.runner-key { background: hsl(var(--secondary)); border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 700; padding: 2px 7px; }
+.runner-task { border-left: 3px solid hsl(var(--warning-fg)); font-size: 12px; padding-left: 8px; }
+.runner-details td { background: hsl(var(--secondary) / 0.35); }
+.runner-details-grid { display: grid; gap: 16px 32px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); padding: 4px 0; }
+.runner-details-grid h4 { color: hsl(var(--muted-foreground)); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; margin: 0 0 6px; text-transform: uppercase; }
+.runners-summary { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-bottom: 16px; }
+.runners-summary .panel { margin: 0; }
+.runners-summary strong { display: block; font-size: 24px; }
 
 .raw-details { color: hsl(var(--muted-foreground)); margin-top: 6px; }
 .raw-details summary { cursor: pointer; font-size: 13px; font-weight: 600; margin-bottom: 10px; }

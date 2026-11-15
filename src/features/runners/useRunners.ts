@@ -3,20 +3,42 @@ import { useEffect, useState } from "react";
 import { getValidAccessToken } from "../../lib/blocks/auth";
 import { koraConfig } from "../../lib/kora/config";
 
-export type RunnerRepo = { key: string; github: string | null };
+export type RunnerRepo = { key: string; github: string | null; branch?: string | null };
 
-// Mirrors RunnerView in DoPilot-api (Runners/Models.cs).
+export type KoraUser = { sub: string; email: string | null; name: string | null };
+
+export type TaskSummary = {
+  id: string;
+  repo: string;
+  prompt: string;
+  from: KoraUser;
+  state: "Queued" | "Running" | "Succeeded" | "Failed";
+  createdAt: string;
+  startedAt: string | null;
+};
+
+// Mirrors RunnerView in api/Runners/Models.cs. Machine details are null for runners older than kora 0.2.2.
 export type Runner = {
   id: string;
   name: string;
   machine: string | null;
   version: string | null;
-  owner: { sub: string; email: string | null; name: string | null };
+  owner: KoraUser;
   repos: RunnerRepo[];
   agents: string[];
   concurrency: number;
   activeTasks: number;
   connectedAt: string;
+  platform: string | null;
+  nodeVersion: string | null;
+  claudeVersion: string | null;
+  githubAccount: string | null;
+  allowBinaries: string[];
+  dispatchAccept: string[];
+  completedTasks: number;
+  failedTasks: number;
+  lastActivityAt: string | null;
+  currentTasks: TaskSummary[];
 };
 
 export type HubStatus = "unconfigured" | "connecting" | "online" | "reconnecting" | "offline";
