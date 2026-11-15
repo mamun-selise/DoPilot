@@ -1,6 +1,6 @@
 {
   "name": "@dopilot/kora",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "KORA local runner: connects this machine's Claude Code to the DoPilot web app.",
   "type": "module",
   "bin": {
@@ -8,9 +8,14 @@
   },
   "files": [
     "bin",
+    "lib",
     "source.json",
     "README.md"
   ],
+  "dependencies": {
+    "@microsoft/signalr": "^11.0.0",
+    "yaml": "^2.9.1"
+  },
   "engines": {
     "node": ">=20"
   },

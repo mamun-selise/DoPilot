@@ -8,7 +8,9 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, r
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const appDomain = (process.env.VITE_BLOCKS_APP_DOMAIN || readDotEnv(".env").VITE_BLOCKS_APP_DOMAIN || "").replace(/\/+$/, "");
+const dotEnv = readDotEnv(".env");
+const env = (key) => (process.env[key] || dotEnv[key] || "").replace(/\/+$/, "");
+const appDomain = env("VITE_BLOCKS_APP_DOMAIN");
 if (!appDomain) {
   console.error("pack-kora: VITE_BLOCKS_APP_DOMAIN is not set; cannot record the update source.");
   process.exit(1);
@@ -16,8 +18,17 @@ if (!appDomain) {
 
 const stage = mkdtempSync(join(tmpdir(), "kora-"));
 try {
-  cpSync("kora", stage, { recursive: true });
-  writeFileSync(join(stage, "source.json"), JSON.stringify({ url: `${appDomain}/kora` }, null, 2) + "\n");
+  cpSync("kora", stage, { recursive: true, filter: (src) => !/[\\/]node_modules([\\/]|$)/.test(src) });
+  // Everything the CLI needs to log in and connect; all public values.
+  const settings = {
+    url: `${appDomain}/kora`,
+    iamUrl: env("VITE_BLOCKS_OIDC_URL"),
+    tenantId: env("VITE_BLOCKS_X_BLOCKS_KEY"),
+    clientId: env("KORA_CLI_CLIENT_ID"),
+    hubUrl: env("KORA_HUB_URL")
+  };
+  for (const [key, value] of Object.entries(settings)) if (!value) console.warn(`pack-kora: ${key} is empty; kora will need it from the environment.`);
+  writeFileSync(join(stage, "source.json"), JSON.stringify(settings, null, 2) + "\n");
 
   mkdirSync("dist", { recursive: true });
   const packed = JSON.parse(
