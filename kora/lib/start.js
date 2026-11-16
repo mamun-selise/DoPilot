@@ -7,7 +7,7 @@ import { createInterface } from "node:readline";
 import * as signalR from "@microsoft/signalr";
 import { accessToken, session } from "./auth.js";
 import { loadRunner, paths, pkg, source } from "./config.js";
-import { github } from "./github.js";
+import { github, log, who } from "./github.js";
 
 export async function start() {
   const runner = loadRunner();
@@ -42,9 +42,11 @@ export async function start() {
   });
 
   // The PRs page: list, approve and merge with this machine's gh login. The return value is the answer.
-  connection.on("GitHub", (request) =>
-    accepts(request?.from, runner, me) ? github(request, runner) : { ok: false, error: notAccepted(request?.from) }
-  );
+  connection.on("GitHub", (request) => {
+    if (accepts(request?.from, runner, me)) return github(request, runner);
+    log(`PR ${request?.action} ${request?.repo} — refused: ${who(request?.from)} is not in dispatch.accept`);
+    return { ok: false, error: notAccepted(request?.from) };
+  });
 
   const claudeVersion = run("claude --version")?.split(" ")[0] ?? null;
   // Re-read on every (re)connect so the Runners page shows each clone's current branch.
