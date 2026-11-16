@@ -134,6 +134,7 @@ export function RunnersPage() {
                                 )}
                                 {repo.branch ? <span className="muted"><GitBranch size={12} /> {repo.branch}</span> : null}
                                 {repo.local === false ? <span className="muted">{t("repos.githubOnly")}</span> : null}
+                                {repo.deployment ? <span className="muted">{t("repos.deploymentRepo")}</span> : null}
                               </div>
                             ))}
                           </div>

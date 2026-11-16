@@ -8,7 +8,8 @@ import type { HubStatus, KoraUser } from "../runners/useRunners";
 // Mirrors PullRequestRepo / PullRequestRoute in api/Runners/Models.cs.
 // local is false for a repository the runner has only on GitHub (added from the web app, no clone).
 export type PullRequestRoute = { runnerId: string; runnerName: string; owner: KoraUser; githubAccount: string | null; local: boolean };
-export type PullRequestRepo = { github: string; runners: PullRequestRoute[] };
+// deployment: a deployment (yml) repo, shown only on the Deploy to stage / prod pages.
+export type PullRequestRepo = { github: string; runners: PullRequestRoute[]; deployment: boolean };
 
 // What kora/lib/github.js reports for each open pull request (gh pr list).
 export type PullRequest = {

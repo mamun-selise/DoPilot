@@ -161,13 +161,14 @@ export async function addRepository(request, runner) {
       // Checks the gh account can see it, and gets GitHub's own spelling of the name.
       const github = JSON.parse(await gh(["repo", "view", wanted, "--json", "nameWithOwner"])).nameWithOwner;
       const key = uniqueKey(runner, github.split("/")[1]);
+      const entry = request.deployment ? { github, deployment: true } : { github };
       editRunnerYml((doc) => {
         if (!YAML.isMap(doc.get("repos"))) doc.set("repos", doc.createNode({}));
-        const entry = doc.createNode({ github });
-        entry.flow = true; // matches the { path, github } lines kora init writes
-        doc.setIn(["repos", key], entry);
+        const node = doc.createNode(entry);
+        node.flow = true; // matches the { path, github } lines kora init writes
+        doc.setIn(["repos", key], node);
       });
-      runner.repos = { ...(runner.repos ?? {}), [key]: { github } };
+      runner.repos = { ...(runner.repos ?? {}), [key]: entry };
       answer = { ok: true, key, github };
     }
   } catch (error) {
@@ -248,7 +249,7 @@ export async function addLocalRepository(request, runner) {
     if (!upgrade && wanted && runner.repos?.[wanted]) throw new Error(`The key "${wanted}" is already used in runner.yml.`);
     const key = upgrade ?? (wanted || uniqueKey(runner, basename(path)));
 
-    const entry = github ? { path, github } : { path };
+    const entry = { path, ...(github ? { github } : {}), ...(request.deployment || runner.repos?.[upgrade]?.deployment ? { deployment: true } : {}) };
     editRunnerYml((doc) => {
       if (!YAML.isMap(doc.get("repos"))) doc.set("repos", doc.createNode({}));
       const node = doc.createNode(entry);
@@ -278,6 +279,28 @@ function git(args) {
   } catch {
     return null;
   }
+}
+
+// Marks a repository as a deployment (yml) repo, or not. Deployment repos show only on the Deploy to stage / prod
+// pages of the web app, and nowhere else.
+export function setDeployment(request, runner) {
+  log(`Repo ${request?.deployment ? "mark" : "unmark"} deployment ${request?.repo} — requested by ${who(request?.from)}`);
+  let answer;
+  const key = findRepo(runner, String(request?.repo ?? ""));
+  if (!key) answer = { ok: false, error: `${request?.repo} is not in this runner's runner.yml.` };
+  else {
+    try {
+      const deployment = Boolean(request.deployment);
+      editRunnerYml((doc) => (deployment ? doc.setIn(["repos", key, "deployment"], true) : doc.deleteIn(["repos", key, "deployment"])));
+      const { deployment: _old, ...rest } = runner.repos[key];
+      runner.repos = { ...runner.repos, [key]: deployment ? { ...rest, deployment: true } : rest };
+      answer = { ok: true, key, deployment };
+    } catch (error) {
+      answer = { ok: false, error: error.message };
+    }
+  }
+  log(answer.ok ? `  ✓ "${answer.key}" ${answer.deployment ? "is now a deployment repo" : "is no longer a deployment repo"}` : `  ✗ failed: ${answer.error}`);
+  return answer;
 }
 
 function findRepo(runner, github) {

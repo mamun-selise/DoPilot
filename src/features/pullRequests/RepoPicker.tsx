@@ -1,4 +1,4 @@
-import { Cloud, FolderGit2, Plus, Trash2 } from "lucide-react";
+import { Cloud, FolderGit2, PackageCheck, PackageX, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useT } from "../../lib/i18n/LocalizationProvider";
 import { Alert } from "../../shared/ui/Alert";
@@ -7,20 +7,25 @@ import type { PullRequestRepo, PullRequestRoute, usePullRequestHub } from "./use
 
 type Hub = ReturnType<typeof usePullRequestHub>;
 
-// Shared by the PRs and Repo settings pages, so both open on the same repository.
-const REPO_KEY = "blocks-app:prs-repo";
+// Code repositories (PRs, Repo settings, Ready to stage) and deployment (yml) repositories (Deploy to stage / prod)
+// are kept apart: each page shows one kind, and each kind remembers its own selection across its pages.
+export type RepoKind = "code" | "deployment";
+const REPO_KEY: Record<RepoKind, string> = { code: "blocks-app:prs-repo", deployment: "blocks-app:deploy-repo" };
+
+export const reposOfKind = (repos: PullRequestRepo[], kind: RepoKind) => repos.filter((repo) => repo.deployment === (kind === "deployment"));
 
 // Keeps the selection valid as runners come and go: falls back to the first repo, and to the first runner for
 // it (the user's own runner comes first).
-export function useRepoSelection(repos: PullRequestRepo[]) {
-  const [repo, setRepo] = useState(() => localStorage.getItem(REPO_KEY) ?? "");
+export function useRepoSelection(allRepos: PullRequestRepo[], kind: RepoKind = "code") {
+  const repos = reposOfKind(allRepos, kind);
+  const [repo, setRepo] = useState(() => localStorage.getItem(REPO_KEY[kind]) ?? "");
   const [runnerId, setRunnerId] = useState("");
 
   const selected = repos.find((entry) => entry.github.toLowerCase() === repo.toLowerCase()) ?? repos[0];
   const route = selected?.runners.find((entry) => entry.runnerId === runnerId) ?? selected?.runners[0];
 
   useEffect(() => {
-    if (selected) localStorage.setItem(REPO_KEY, selected.github);
+    if (selected) localStorage.setItem(REPO_KEY[kind], selected.github);
   }, [selected?.github]);
 
   const selectRepo = (github: string) => {
@@ -28,13 +33,15 @@ export function useRepoSelection(repos: PullRequestRepo[]) {
     setRunnerId("");
   };
 
-  return { selected, route, selectRepo, selectRunner: setRunnerId };
+  return { kind, repos, selected, route, selectRepo, selectRunner: setRunnerId };
 }
 
 type Selection = ReturnType<typeof useRepoSelection>;
 
 export function RepoPicker({
   hub,
+  kind,
+  repos,
   route,
   selected,
   selectRepo,
@@ -42,8 +49,24 @@ export function RepoPicker({
 }: { hub: Hub } & Selection & { selected: PullRequestRepo; route: PullRequestRoute }) {
   const { t } = useT();
   const [removing, setRemoving] = useState(false);
+  const [switching, setSwitching] = useState(false);
+  const [switchError, setSwitchError] = useState<string | null>(null);
+  const own = hub.ownRunners.some((entry) => entry.runnerId === route.runnerId);
   // A GitHub-only repository on one of the user's own runners can be removed from here; clones live in runner.yml.
-  const removable = !route.local && hub.ownRunners.some((own) => own.runnerId === route.runnerId);
+  const removable = !route.local && own;
+
+  // Moves the repository to the other kind; it then leaves this page's list and shows on the other pages.
+  async function switchKind() {
+    setSwitching(true);
+    setSwitchError(null);
+    try {
+      await hub.askGitHub("SetDeploymentRepository", route.runnerId, selected.github, kind === "code");
+    } catch (failure) {
+      setSwitchError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setSwitching(false);
+    }
+  }
 
   return (
     <div className="repo-picker">
@@ -51,7 +74,7 @@ export function RepoPicker({
         <label className="form-field">
           <span>{t("prs.repository")}</span>
           <select value={selected.github} onChange={(event) => selectRepo(event.target.value)}>
-            {hub.repos.map((entry) => <option key={entry.github} value={entry.github}>{entry.github}</option>)}
+            {repos.map((entry) => <option key={entry.github} value={entry.github}>{entry.github}</option>)}
           </select>
         </label>
         <label className="form-field">
@@ -62,20 +85,33 @@ export function RepoPicker({
         </label>
       </div>
       <div className="repo-picker-actions">
-        <AddRepositoryButton hub={hub} onAdded={selectRepo} />
+        <AddRepositoryButton hub={hub} onAdded={selectRepo} deployment={kind === "deployment"} />
+        {own ? (
+          <button
+            className="icon-button"
+            onClick={() => void switchKind()}
+            disabled={switching}
+            title={kind === "code" ? t("repos.markDeployment.hint") : t("repos.unmarkDeployment.hint")}
+          >
+            {kind === "code" ? <PackageCheck size={16} /> : <PackageX size={16} />}
+            {kind === "code" ? t("repos.markDeployment") : t("repos.unmarkDeployment")}
+          </button>
+        ) : null}
         {removable ? (
           <button className="icon-button" onClick={() => setRemoving(true)} title={t("repos.remove")}>
             <Trash2 size={16} /> {t("repos.remove")}
           </button>
         ) : null}
         {!route.local ? <span className="chip">{t("repos.githubOnly")}</span> : null}
+        {kind === "deployment" ? <span className="chip">{t("repos.deploymentRepo")}</span> : null}
       </div>
+      {switchError ? <Alert tone="error">{switchError}</Alert> : null}
       {removing ? <RemoveRepositoryDialog hub={hub} repo={selected.github} route={route} onClose={() => setRemoving(false)} /> : null}
     </div>
   );
 }
 
-export function AddRepositoryButton({ hub, onAdded }: { hub: Hub; onAdded: (github: string) => void }) {
+export function AddRepositoryButton({ deployment = false, hub, onAdded }: { deployment?: boolean; hub: Hub; onAdded: (github: string) => void }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
   return (
@@ -83,7 +119,7 @@ export function AddRepositoryButton({ hub, onAdded }: { hub: Hub; onAdded: (gith
       <button className="icon-button" onClick={() => setOpen(true)}>
         <Plus size={16} /> {t("repos.add")}
       </button>
-      {open ? <AddRepositoryDialog hub={hub} onAdded={onAdded} onClose={() => setOpen(false)} /> : null}
+      {open ? <AddRepositoryDialog hub={hub} deployment={deployment} onAdded={onAdded} onClose={() => setOpen(false)} /> : null}
     </>
   );
 }
@@ -97,8 +133,14 @@ function parseRepo(text: string) {
 
 type Candidate = { path: string; github: string | null };
 
-function AddRepositoryDialog({ hub, onAdded, onClose }: { hub: Hub; onAdded: (github: string) => void; onClose: () => void }) {
+function AddRepositoryDialog({
+  deployment: deploymentDefault,
+  hub,
+  onAdded,
+  onClose
+}: { deployment: boolean; hub: Hub; onAdded: (github: string) => void; onClose: () => void }) {
   const { t } = useT();
+  const [deployment, setDeployment] = useState(deploymentDefault);
   const [source, setSource] = useState<"local" | "github">("local");
   const [text, setText] = useState("");
   const [path, setPath] = useState("");
@@ -132,8 +174,8 @@ function AddRepositoryDialog({ hub, onAdded, onClose }: { hub: Hub; onAdded: (gi
     try {
       const answer =
         source === "local"
-          ? await hub.askGitHub("AddLocalRepository", runner.runnerId, path, key || null)
-          : await hub.askGitHub("AddRepository", runner.runnerId, repo);
+          ? await hub.askGitHub("AddLocalRepository", runner.runnerId, path, key || null, deployment)
+          : await hub.askGitHub("AddRepository", runner.runnerId, repo, deployment);
       if (answer.github) onAdded(String(answer.github));
       onClose();
     } catch (failure) {
@@ -220,6 +262,13 @@ function AddRepositoryDialog({ hub, onAdded, onClose }: { hub: Hub; onAdded: (gi
               {text && !repo ? <Alert tone="error">{t("repos.add.invalid")}</Alert> : null}
             </>
           )}
+
+          <label className="checkbox-field">
+            <input type="checkbox" checked={deployment} onChange={(event) => setDeployment(event.target.checked)} />
+            <span>
+              <strong>{t("repos.add.deployment")}</strong> <span className="muted">{t("repos.add.deploymentHint")}</span>
+            </span>
+          </label>
 
           {error ? <Alert tone="error">{error}</Alert> : null}
           <div className="modal-actions">

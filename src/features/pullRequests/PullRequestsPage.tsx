@@ -1,6 +1,7 @@
-import { Check, ExternalLink, GitMerge, GitPullRequest, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { Check, ExternalLink, GitMerge, GitPullRequest, RefreshCw, Rocket } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useT } from "../../lib/i18n/LocalizationProvider";
+import type { TranslationKey } from "../../lib/i18n/dictionary";
 import { ActionButton } from "../../shared/ui/ActionButton";
 import { Alert } from "../../shared/ui/Alert";
 import { EmptyState } from "../../shared/ui/EmptyState";
@@ -31,21 +32,47 @@ const hubTone: Record<HubStatus, "good" | "warn" | "neutral"> = {
 
 const MERGE_METHOD_KEY = "blocks-app:prs-merge-method";
 
+// "code": the PRs page, code repositories, every open PR. "stage" / "prod": the Release > Deploy pages, deployment
+// (yml) repositories only, and only the PRs whose title names that environment (they all target the same branch).
+export type PullRequestsVariant = "code" | "stage" | "prod";
+
+const TITLE_MATCH: Record<Exclude<PullRequestsVariant, "code">, RegExp> = {
+  stage: /\bstag(e|ing)\b/i,
+  prod: /\bprod(uction)?\b/i
+};
+
+const TEXT: Record<PullRequestsVariant, { title: TranslationKey; subtitle: TranslationKey; empty: TranslationKey; emptyBody: TranslationKey; noRepos: TranslationKey; noReposBody: TranslationKey }> = {
+  code: { title: "prs.title", subtitle: "prs.subtitle", empty: "prs.empty.title", emptyBody: "prs.empty.body", noRepos: "prs.noRepos.title", noReposBody: "prs.noRepos.body" },
+  stage: { title: "deploy.stage.title", subtitle: "deploy.stage.subtitle", empty: "deploy.stage.empty", emptyBody: "deploy.stage.emptyBody", noRepos: "deploy.noRepos.title", noReposBody: "deploy.noRepos.body" },
+  prod: { title: "deploy.prod.title", subtitle: "deploy.prod.subtitle", empty: "deploy.prod.empty", emptyBody: "deploy.prod.emptyBody", noRepos: "deploy.noRepos.title", noReposBody: "deploy.noRepos.body" }
+};
+
 export function PullRequestsPage() {
+  return <PullRequestsView variant="code" />;
+}
+
+export function PullRequestsView({ variant }: { variant: PullRequestsVariant }) {
   const { t } = useT();
   const hub = usePullRequestHub();
-  const selection = useRepoSelection(hub.repos);
+  const selection = useRepoSelection(hub.repos, variant === "code" ? "code" : "deployment");
   const { route, selected } = selection;
   const [approving, setApproving] = useState<PullRequest | null>(null);
   const [merging, setMerging] = useState<PullRequest | null>(null);
+  const text = TEXT[variant];
+  const Icon = variant === "code" ? GitPullRequest : Rocket;
 
-  const prs = useOpenPullRequests(hub.askGitHub, route, selected?.github, hub.status === "online");
+  const query = useOpenPullRequests(hub.askGitHub, route, selected?.github, hub.status === "online");
+  const shown = useMemo(
+    () => (variant === "code" ? query.data : query.data?.filter((pr) => TITLE_MATCH[variant].test(pr.title))),
+    [query.data, variant]
+  );
+  const prs = { ...query, data: shown };
 
   return (
     <section className="wide">
       <PageHeader
-        title={t("prs.title")}
-        subtitle={t("prs.subtitle")}
+        title={t(text.title)}
+        subtitle={t(text.subtitle)}
         actions={
           <>
             <StatusPill tone={hubTone[hub.status]}>{t(`runners.hub.${hub.status}`)}</StatusPill>
@@ -60,7 +87,7 @@ export function PullRequestsPage() {
       />
 
       {hub.status === "unconfigured" ? (
-        <EmptyState icon={<GitPullRequest size={22} />} title={t("runners.unconfigured.title")} description={t("runners.unconfigured.body")} />
+        <EmptyState icon={<Icon size={22} />} title={t("runners.unconfigured.title")} description={t("runners.unconfigured.body")} />
       ) : hub.status === "offline" ? (
         <ErrorState message={hub.error || t("runners.offline")} onRetry={hub.retry} />
       ) : hub.status === "connecting" ? (
@@ -70,10 +97,10 @@ export function PullRequestsPage() {
         </div>
       ) : !selected || !route ? (
         <EmptyState
-          icon={<GitPullRequest size={22} />}
-          title={t("prs.noRepos.title")}
-          description={t("prs.noRepos.body")}
-          action={<AddRepositoryButton hub={hub} onAdded={selection.selectRepo} />}
+          icon={<Icon size={22} />}
+          title={t(text.noRepos)}
+          description={t(text.noReposBody)}
+          action={<AddRepositoryButton hub={hub} onAdded={selection.selectRepo} deployment={variant !== "code"} />}
         />
       ) : (
         <>
@@ -81,14 +108,14 @@ export function PullRequestsPage() {
 
           {prs.isError ? (
             <ErrorState message={prs.error.message} onRetry={() => void prs.refetch()} />
-          ) : prs.isPending ? (
+          ) : prs.isPending || !prs.data ? (
             <div className="panel">
               <Skeleton className="skeleton-line" />
               <Skeleton className="skeleton-line" />
               <Skeleton className="skeleton-line" />
             </div>
           ) : prs.data.length === 0 ? (
-            <EmptyState icon={<GitPullRequest size={22} />} title={t("prs.empty.title")} description={fill(t("prs.empty.body"), { repo: selected.github })} />
+            <EmptyState icon={<Icon size={22} />} title={t(text.empty)} description={fill(t(text.emptyBody), { repo: selected.github })} />
           ) : (
             <div className="table-shell">
               <table className="runners-table prs-table">

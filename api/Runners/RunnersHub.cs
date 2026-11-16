@@ -130,8 +130,12 @@ public sealed partial class RunnersHub(RunnerRegistry registry, ReleaseQueues qu
     /// <summary>The caller's own runners: the ones they may add repositories to.</summary>
     public IReadOnlyList<PullRequestRoute> OwnRunners() => registry.OwnRunners(CurrentUser);
 
-    public Task<JsonElement> AddRepository(string runnerId, string github) =>
-        ManageRepository(runnerId, new { action = "add", repo = CheckRepoName(github.Trim()), from = CurrentUser });
+    public Task<JsonElement> AddRepository(string runnerId, string github, bool deployment) =>
+        ManageRepository(runnerId, new { action = "add", repo = CheckRepoName(github.Trim()), deployment, from = CurrentUser });
+
+    /// <summary>Marks a repository as a deployment (yml) repo or not, in the runner's runner.yml (kora 0.2.9+).</summary>
+    public Task<JsonElement> SetDeploymentRepository(string runnerId, string github, bool deployment) =>
+        ManageRepository(runnerId, new { action = "setDeployment", repo = CheckRepoName(github), deployment, from = CurrentUser });
 
     public Task<JsonElement> RemoveRepository(string runnerId, string github) =>
         ManageRepository(runnerId, new { action = "remove", repo = CheckRepoName(github), from = CurrentUser });
@@ -143,10 +147,10 @@ public sealed partial class RunnersHub(RunnerRegistry registry, ReleaseQueues qu
         ManageRepository(runnerId, new { action = "candidates", from = CurrentUser });
 
     /// <summary>The runner checks the folder is a git clone, reads its GitHub remote and saves it in runner.yml.</summary>
-    public Task<JsonElement> AddLocalRepository(string runnerId, string path, string? key)
+    public Task<JsonElement> AddLocalRepository(string runnerId, string path, string? key, bool deployment)
     {
         if (string.IsNullOrWhiteSpace(path)) throw new HubException("Enter the folder of the clone on the runner's machine.");
-        return ManageRepository(runnerId, new { action = "addLocal", path = path.Trim(), key = key?.Trim(), from = CurrentUser });
+        return ManageRepository(runnerId, new { action = "addLocal", path = path.Trim(), key = key?.Trim(), deployment, from = CurrentUser });
     }
 
     /// <summary>What a runner offers is its owner's to change, so only the owner may.</summary>
@@ -189,7 +193,7 @@ public sealed partial class RunnersHub(RunnerRegistry registry, ReleaseQueues qu
         catch (Exception error) when (error is not HubException)
         {
             log.LogWarning("gh request to {Runner} failed: {Error}", runner.Id, error.Message);
-            throw new HubException($"Runner {runner.Registration.Name} could not answer ({error.Message}). It may need a newer kora (PRs 0.2.3, repo settings 0.2.5, adding repositories 0.2.6, local clones 0.2.7): run kora update there and restart kora start.");
+            throw new HubException($"Runner {runner.Registration.Name} could not answer ({error.Message}). It may need a newer kora (PRs 0.2.3, repo settings 0.2.5, adding repositories 0.2.6, local clones 0.2.7, deployment repos 0.2.9): run kora update there and restart kora start.");
         }
     }
 

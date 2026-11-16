@@ -7,7 +7,7 @@ import { createInterface } from "node:readline";
 import * as signalR from "@microsoft/signalr";
 import { accessToken, session } from "./auth.js";
 import { loadRunner, paths, pkg, source } from "./config.js";
-import { addLocalRepository, addRepository, github, localCandidates, log, removeRepository, who } from "./github.js";
+import { addLocalRepository, addRepository, github, localCandidates, log, removeRepository, setDeployment, who } from "./github.js";
 import { cancelMergeQueue, startMergeQueue } from "./release.js";
 
 export async function start() {
@@ -68,6 +68,7 @@ export async function start() {
     if (request.action === "candidates") return localCandidates(runner);
     const answer =
       request.action === "remove" ? await removeRepository(request, runner)
+      : request.action === "setDeployment" ? setDeployment(request, runner)
       : request.action === "addLocal" ? await addLocalRepository(request, runner)
       : await addRepository(request, runner);
     // Re-register once this answer is on its way, so the web app's repository list picks up the change.
@@ -86,7 +87,8 @@ export async function start() {
         key,
         github: repo.github ?? null,
         branch: repo.path ? run(`git -C "${repo.path}" rev-parse --abbrev-ref HEAD`) : null,
-        local: Boolean(repo.path)
+        local: Boolean(repo.path),
+        deployment: Boolean(repo.deployment)
       })),
       agents: Object.keys(runner.agents ?? {}).filter((key) => runner.agents[key]?.enabled),
       concurrency,

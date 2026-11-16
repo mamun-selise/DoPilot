@@ -1,4 +1,4 @@
-import { GitPullRequest, Layers, Rocket, Server, Settings2, UserRound, type LucideIcon } from "lucide-react";
+import { CloudUpload, GitPullRequest, Layers, Rocket, Server, Settings2, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
 import type { TranslationKey } from "../../lib/i18n/dictionary";
 
 export type NavLink = { href: string; labelKey: TranslationKey; icon: LucideIcon };
@@ -14,7 +14,11 @@ export const navItems: (NavLink | NavGroup)[] = [
     id: "release",
     labelKey: "nav.release",
     icon: Rocket,
-    children: [{ href: "/release/stage", labelKey: "nav.release.stage", icon: Layers }]
+    children: [
+      { href: "/release/stage", labelKey: "nav.release.stage", icon: Layers },
+      { href: "/release/deploy-stage", labelKey: "nav.release.deployStage", icon: CloudUpload },
+      { href: "/release/deploy-prod", labelKey: "nav.release.deployProd", icon: ShieldCheck }
+    ]
   }
 ];
 
