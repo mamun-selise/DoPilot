@@ -27,6 +27,10 @@ export async function status() {
   if (runner) {
     ok(Boolean(runner.name), `name: ${runner.name ?? "<missing>"}`);
     for (const [key, repo] of Object.entries(runner.repos ?? {})) {
+      if (!repo?.path && repo?.github) {
+        ok(true, `${key}: ${repo.github} — GitHub only (PRs and repo settings; no clone, so no tasks)`);
+        continue;
+      }
       const isRepo = repo?.path && existsSync(repo.path) && run(`git -C "${repo.path}" rev-parse --git-dir`) !== null;
       ok(isRepo, `${key}: ${repo?.path ?? "<no path>"}${repo?.github ? ` (${repo.github})` : ""}${isRepo ? "" : " — not a git repository"}`);
     }

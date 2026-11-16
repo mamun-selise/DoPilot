@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { koraConfig } from "../../lib/kora/config";
 import { createKoraConnection, describeHubError as describe } from "../../lib/kora/hub";
 
-export type RunnerRepo = { key: string; github: string | null; branch?: string | null };
+// local is false for a GitHub-only repository (added from the web app, no clone); null from kora before 0.2.6.
+export type RunnerRepo = { key: string; github: string | null; branch?: string | null; local?: boolean | null };
 
 export type KoraUser = { sub: string; email: string | null; name: string | null };
 

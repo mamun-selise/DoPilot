@@ -9,7 +9,7 @@ import { ErrorState } from "../../shared/ui/ErrorState";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import { Skeleton } from "../../shared/ui/Skeleton";
 import { StatusPill } from "../../shared/ui/StatusPill";
-import { RepoPicker, useRepoSelection } from "../pullRequests/RepoPicker";
+import { AddRepositoryButton, RepoPicker, useRepoSelection } from "../pullRequests/RepoPicker";
 import { usePullRequestHub, type PullRequestRoute } from "../pullRequests/usePullRequests";
 import type { HubStatus } from "../runners/useRunners";
 import { useRepoSettings, useSaveRepoSettings, type RepoSettings, type SettingsChanges, type SwitchKey } from "./useRepoSettings";
@@ -60,10 +60,15 @@ export function RepoSettingsPage() {
           <Skeleton className="skeleton-line" />
         </div>
       ) : !selected || !route ? (
-        <EmptyState icon={<Settings2 size={22} />} title={t("prs.noRepos.title")} description={t("prs.noRepos.body")} />
+        <EmptyState
+          icon={<Settings2 size={22} />}
+          title={t("prs.noRepos.title")}
+          description={t("prs.noRepos.body")}
+          action={<AddRepositoryButton hub={hub} onAdded={selection.selectRepo} />}
+        />
       ) : (
         <>
-          <RepoPicker repos={hub.repos} {...selection} selected={selected} route={route} />
+          <RepoPicker hub={hub} {...selection} selected={selected} route={route} />
           {settings.isError ? (
             <ErrorState message={settings.error.message} onRetry={() => void settings.refetch()} />
           ) : settings.isPending ? (

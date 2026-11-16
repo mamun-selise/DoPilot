@@ -7,7 +7,7 @@ import { createInterface } from "node:readline";
 import * as signalR from "@microsoft/signalr";
 import { accessToken, session } from "./auth.js";
 import { loadRunner, paths, pkg, source } from "./config.js";
-import { github, log, who } from "./github.js";
+import { addRepository, github, log, removeRepository, who } from "./github.js";
 
 export async function start() {
   const runner = loadRunner();
@@ -48,6 +48,18 @@ export async function start() {
     return { ok: false, error: notAccepted(request?.from) };
   });
 
+  // Add/remove a GitHub-only repository from the web app. Only the owner may change what this machine offers.
+  connection.on("ManageRepository", async (request) => {
+    if (!request?.from?.sub || request.from.sub !== me.sub) {
+      log(`Repo ${request?.action} ${request?.repo} — refused: ${who(request?.from)} is not this runner's owner`);
+      return { ok: false, error: "Only the runner's owner can add or remove its repositories." };
+    }
+    const answer = request.action === "remove" ? await removeRepository(request, runner) : await addRepository(request, runner);
+    // Re-register once this answer is on its way, so the web app's repository list picks up the change.
+    if (answer.ok) setTimeout(() => register().catch(() => {}), 0);
+    return answer;
+  });
+
   const claudeVersion = run("claude --version")?.split(" ")[0] ?? null;
   // Re-read on every (re)connect so the Runners page shows each clone's current branch.
   const register = () =>
@@ -58,7 +70,8 @@ export async function start() {
       repos: Object.entries(runner.repos ?? {}).map(([key, repo]) => ({
         key,
         github: repo.github ?? null,
-        branch: repo.path ? run(`git -C "${repo.path}" rev-parse --abbrev-ref HEAD`) : null
+        branch: repo.path ? run(`git -C "${repo.path}" rev-parse --abbrev-ref HEAD`) : null,
+        local: Boolean(repo.path)
       })),
       agents: Object.keys(runner.agents ?? {}).filter((key) => runner.agents[key]?.enabled),
       concurrency,
@@ -101,6 +114,7 @@ export async function start() {
 
 function refuse(task, runner, me) {
   if (!runner.repos?.[task.repo]) return `Repository "${task.repo}" is not in this runner's runner.yml.`;
+  if (!runner.repos[task.repo].path) return `Repository "${task.repo}" has no local clone on this runner (GitHub only), so tasks cannot run on it.`;
   return accepts(task.from, runner, me) ? null : notAccepted(task.from);
 }
 

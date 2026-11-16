@@ -1,8 +1,9 @@
 // Pull requests and repository settings for the web app's PRs and Repo settings pages, done with this machine's
 // gh login (`gh auth login`).
 import { execFile } from "node:child_process";
-import { mkdirSync } from "node:fs";
-import { home } from "./config.js";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import YAML from "yaml";
+import { home, paths } from "./config.js";
 
 const PR_FIELDS = [
   "number", "title", "url", "author", "isDraft", "headRefName", "baseRefName", "createdAt", "updatedAt",
@@ -133,6 +134,75 @@ async function editSettings(repo, changes) {
   }
   if (args.length) await gh(["repo", "edit", repo, ...args]);
   return { ok: true, changed: changed.join(", "), settings: await readSettings(repo) };
+}
+
+// ---- repositories added from the web app: GitHub only, no clone (PRs and repo settings work, tasks do not) ----
+
+const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
+
+export async function addRepository(request, runner) {
+  log(`Repo add ${request?.repo} — requested by ${who(request?.from)}`);
+  let answer;
+  try {
+    const wanted = String(request?.repo ?? "").trim();
+    if (!REPO_NAME.test(wanted)) answer = { ok: false, error: "Use owner/name, for example selise/deploy-config." };
+    else if (findRepo(runner, wanted)) answer = { ok: false, error: `${wanted} is already in this runner's runner.yml.` };
+    else {
+      // Checks the gh account can see it, and gets GitHub's own spelling of the name.
+      const github = JSON.parse(await gh(["repo", "view", wanted, "--json", "nameWithOwner"])).nameWithOwner;
+      const key = uniqueKey(runner, github.split("/")[1]);
+      editRunnerYml((doc) => {
+        if (!YAML.isMap(doc.get("repos"))) doc.set("repos", doc.createNode({}));
+        const entry = doc.createNode({ github });
+        entry.flow = true; // matches the { path, github } lines kora init writes
+        doc.setIn(["repos", key], entry);
+      });
+      runner.repos = { ...(runner.repos ?? {}), [key]: { github } };
+      answer = { ok: true, key, github };
+    }
+  } catch (error) {
+    answer = { ok: false, error: error.message };
+  }
+  log(answer.ok ? `  ✓ added to runner.yml as "${answer.key}" (GitHub only, no clone)` : `  ✗ failed: ${answer.error}`);
+  return answer;
+}
+
+export async function removeRepository(request, runner) {
+  log(`Repo remove ${request?.repo} — requested by ${who(request?.from)}`);
+  let answer;
+  const key = findRepo(runner, String(request?.repo ?? ""));
+  if (!key) answer = { ok: false, error: `${request?.repo} is not in this runner's runner.yml.` };
+  else if (runner.repos[key].path) answer = { ok: false, error: `${request.repo} is a local clone; remove it from runner.yml by hand.` };
+  else {
+    try {
+      editRunnerYml((doc) => doc.deleteIn(["repos", key]));
+      const { [key]: _removed, ...rest } = runner.repos;
+      runner.repos = rest;
+      answer = { ok: true, key };
+    } catch (error) {
+      answer = { ok: false, error: error.message };
+    }
+  }
+  log(answer.ok ? `  ✓ removed "${answer.key}" from runner.yml` : `  ✗ failed: ${answer.error}`);
+  return answer;
+}
+
+function findRepo(runner, github) {
+  return Object.keys(runner.repos ?? {}).find((key) => runner.repos[key]?.github?.toLowerCase() === github.toLowerCase());
+}
+
+function uniqueKey(runner, name) {
+  const base = name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "") || "repo";
+  let key = base;
+  for (let n = 2; runner.repos?.[key]; n++) key = `${base}-${n}`;
+  return key;
+}
+
+// Edits runner.yml as a YAML document, so the comments kora init wrote stay put.
+function editRunnerYml(change) {
+  const doc = YAML.parseDocument(readFileSync(paths.runner, "utf8"));
+  change(doc);
+  writeFileSync(paths.runner, doc.toString());
 }
 
 // No shell, so titles and review text never reach a command line. Runs in KORA's home, not a clone: with

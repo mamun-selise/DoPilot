@@ -10,7 +10,7 @@ import { PageHeader } from "../../shared/ui/PageHeader";
 import { Skeleton } from "../../shared/ui/Skeleton";
 import { StatusPill } from "../../shared/ui/StatusPill";
 import type { HubStatus } from "../runners/useRunners";
-import { RepoPicker, useRepoSelection } from "./RepoPicker";
+import { AddRepositoryButton, RepoPicker, useRepoSelection } from "./RepoPicker";
 import {
   useApprovePullRequest,
   useMergePullRequest,
@@ -69,10 +69,15 @@ export function PullRequestsPage() {
           <Skeleton className="skeleton-line" />
         </div>
       ) : !selected || !route ? (
-        <EmptyState icon={<GitPullRequest size={22} />} title={t("prs.noRepos.title")} description={t("prs.noRepos.body")} />
+        <EmptyState
+          icon={<GitPullRequest size={22} />}
+          title={t("prs.noRepos.title")}
+          description={t("prs.noRepos.body")}
+          action={<AddRepositoryButton hub={hub} onAdded={selection.selectRepo} />}
+        />
       ) : (
         <>
-          <RepoPicker repos={hub.repos} {...selection} selected={selected} route={route} />
+          <RepoPicker hub={hub} {...selection} selected={selected} route={route} />
 
           {prs.isError ? (
             <ErrorState message={prs.error.message} onRetry={() => void prs.refetch()} />

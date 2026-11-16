@@ -28,7 +28,8 @@ public sealed record RunnerRegistration(
     IReadOnlyList<string>? AllowBinaries = null,
     IReadOnlyList<string>? DispatchAccept = null);
 
-public sealed record RunnerRepo(string Key, string? Github, string? Branch = null);
+/// <summary>Local is false for a GitHub-only repository (no clone: PRs and settings, no tasks); null from kora before 0.2.6.</summary>
+public sealed record RunnerRepo(string Key, string? Github, string? Branch = null, bool? Local = null);
 
 public sealed record TaskSummary(string Id, string Repo, string Prompt, KoraUser From, KoraTaskState State, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt);
 
@@ -57,7 +58,8 @@ public sealed record RunnerView(
 /// <summary>A GitHub repository on the PRs page and the runners whose gh login can reach it.</summary>
 public sealed record PullRequestRepo(string Github, IReadOnlyList<PullRequestRoute> Runners);
 
-public sealed record PullRequestRoute(string RunnerId, string RunnerName, KoraUser Owner, string? GithubAccount);
+/// <summary>Local is false when the runner has the repository only on GitHub (added from the web app).</summary>
+public sealed record PullRequestRoute(string RunnerId, string RunnerName, KoraUser Owner, string? GithubAccount, bool Local = true);
 
 public enum KoraTaskState { Queued, Running, Succeeded, Failed }
 

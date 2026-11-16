@@ -39,6 +39,11 @@ The web app's **PRs** page lists, approves and merges pull requests through a ru
 that machine: install `gh` and run `gh auth login` there. Approvals and merges show as that `gh` account, and
 the same `dispatch.accept` rule decides who may use them. Needs kora 0.2.3 or newer.
 
+Repositories you don't have cloned (for example the one you deploy from) can be added from those pages with
+**Add repository** (kora 0.2.6+). Your runner checks the repo with `gh` and saves it in `runner.yml` as a
+GitHub-only entry, `name: { github: owner/name }`, with no `path`. Pull requests and settings work on it; tasks
+need a clone, so they are refused. Only the runner's owner can add or remove these.
+
 ## Update
 
 ```sh

@@ -83,15 +83,21 @@ public sealed class RunnerRegistry
         .Where(runner => MayUse(runner, user))
         .SelectMany(runner => runner.Registration.Repos
             .Where(repo => !string.IsNullOrEmpty(repo.Github))
-            .Select(repo => (Github: repo.Github!, Runner: runner)))
+            .Select(repo => (Github: repo.Github!, Runner: runner, Local: repo.Local != false)))
         .GroupBy(entry => entry.Github, StringComparer.OrdinalIgnoreCase)
         .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
         .Select(group => new PullRequestRepo(group.Key, group
             .DistinctBy(entry => entry.Runner.Id)
             .OrderByDescending(entry => entry.Runner.Owner.Sub == user.Sub)
             .ThenBy(entry => entry.Runner.Registration.Name)
-            .Select(entry => new PullRequestRoute(entry.Runner.Id, entry.Runner.Registration.Name, entry.Runner.Owner, entry.Runner.Registration.GithubAccount))
+            .Select(entry => new PullRequestRoute(entry.Runner.Id, entry.Runner.Registration.Name, entry.Runner.Owner, entry.Runner.Registration.GithubAccount, entry.Local))
             .ToList()))
+        .ToList();
+
+    public IReadOnlyList<PullRequestRoute> OwnRunners(KoraUser user) => _runners.Values
+        .Where(runner => runner.Owner.Sub == user.Sub)
+        .OrderBy(runner => runner.Registration.Name)
+        .Select(runner => new PullRequestRoute(runner.Id, runner.Registration.Name, runner.Owner, runner.Registration.GithubAccount))
         .ToList();
 }
 

@@ -6,7 +6,8 @@ import { createKoraConnection, describeHubError } from "../../lib/kora/hub";
 import type { HubStatus, KoraUser } from "../runners/useRunners";
 
 // Mirrors PullRequestRepo / PullRequestRoute in api/Runners/Models.cs.
-export type PullRequestRoute = { runnerId: string; runnerName: string; owner: KoraUser; githubAccount: string | null };
+// local is false for a repository the runner has only on GitHub (added from the web app, no clone).
+export type PullRequestRoute = { runnerId: string; runnerName: string; owner: KoraUser; githubAccount: string | null; local: boolean };
 export type PullRequestRepo = { github: string; runners: PullRequestRoute[] };
 
 // What kora/lib/github.js reports for each open pull request (gh pr list).
@@ -32,14 +33,15 @@ export type PullRequest = {
 
 export type MergeMethod = "merge" | "squash" | "rebase";
 
-type GitHubAnswer = { ok: boolean; error?: string | null; pullRequests?: PullRequest[]; settings?: unknown };
+type GitHubAnswer = { ok: boolean; error?: string | null; pullRequests?: PullRequest[]; settings?: unknown; github?: string };
 
-type State = { status: HubStatus; repos: PullRequestRepo[]; error?: string };
+// ownRunners: the user's own runners, the ones they may add repositories to.
+type State = { status: HubStatus; repos: PullRequestRepo[]; ownRunners: PullRequestRoute[]; error?: string };
 
 // Repositories reachable through runners the user may use, kept live: the hub pushes RunnersChanged whenever a
 // runner connects or disconnects, and the list is asked for again. The GitHub work itself runs on a runner (gh).
 export function usePullRequestHub() {
-  const [state, setState] = useState<State>({ status: koraConfig.hubUrl ? "connecting" : "unconfigured", repos: [] });
+  const [state, setState] = useState<State>({ status: koraConfig.hubUrl ? "connecting" : "unconfigured", repos: [], ownRunners: [] });
   const [attempt, setAttempt] = useState(0);
   const connectionRef = useRef<HubConnection | null>(null);
 
@@ -52,7 +54,13 @@ export function usePullRequestHub() {
     const update = (next: Partial<State>) => {
       if (!disposed) setState((current) => ({ ...current, ...next }));
     };
-    const loadRepos = async () => update({ repos: await connection.invoke<PullRequestRepo[]>("PullRequestRepos") });
+    const loadRepos = async () => {
+      const [repos, ownRunners] = await Promise.all([
+        connection.invoke<PullRequestRepo[]>("PullRequestRepos"),
+        connection.invoke<PullRequestRoute[]>("OwnRunners")
+      ]);
+      update({ repos, ownRunners });
+    };
     const watch = async () => {
       await connection.invoke("WatchRunners"); // joins the group that receives RunnersChanged
       await loadRepos();

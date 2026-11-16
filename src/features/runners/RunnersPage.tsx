@@ -133,6 +133,7 @@ export function RunnersPage() {
                                   <span className="muted">{t("runners.repo.noRemote")}</span>
                                 )}
                                 {repo.branch ? <span className="muted"><GitBranch size={12} /> {repo.branch}</span> : null}
+                                {repo.local === false ? <span className="muted">{t("repos.githubOnly")}</span> : null}
                               </div>
                             ))}
                           </div>

@@ -9,7 +9,7 @@ namespace DoPilot.Api.Runners;
 /// runners and dispatches tasks. Each runner decides for itself whose tasks it accepts (runner.yml dispatch.accept).
 /// </summary>
 [Authorize]
-public sealed class RunnersHub(RunnerRegistry registry, UserDirectory users, ILogger<RunnersHub> log) : Hub
+public sealed partial class RunnersHub(RunnerRegistry registry, UserDirectory users, ILogger<RunnersHub> log) : Hub
 {
     private const string Watchers = "watchers";
 
@@ -72,6 +72,8 @@ public sealed class RunnersHub(RunnerRegistry registry, UserDirectory users, ILo
         if (string.IsNullOrWhiteSpace(prompt)) throw new HubException("The task needs a prompt.");
         var runner = registry.Get(runnerId) ?? throw new HubException("That runner is offline.");
         if (!runner.Registration.Repos.Any(r => r.Key == repo)) throw new HubException($"Runner {runner.Registration.Name} has no repository \"{repo}\".");
+        if (runner.Registration.Repos.First(r => r.Key == repo).Local == false)
+            throw new HubException($"\"{repo}\" is GitHub only on runner {runner.Registration.Name} (no local clone), so tasks cannot run on it.");
 
         var user = CurrentUser;
         var task = registry.CreateTask(runner, user, repo, prompt);
@@ -118,19 +120,44 @@ public sealed class RunnersHub(RunnerRegistry registry, UserDirectory users, ILo
         return AskGitHub(runnerId, github, new { action = "editSettings", repo = github, changes, from = CurrentUser });
     }
 
-    /// <summary>Sends a gh request to the runner and waits for its answer ({ ok, error?, ... }).</summary>
-    private async Task<JsonElement> AskGitHub(string runnerId, string github, object request)
+    // ---- repositories added from the web app: GitHub only, saved in the runner's runner.yml (kora 0.2.6+) ----
+
+    /// <summary>The caller's own runners: the ones they may add repositories to.</summary>
+    public IReadOnlyList<PullRequestRoute> OwnRunners() => registry.OwnRunners(CurrentUser);
+
+    public Task<JsonElement> AddRepository(string runnerId, string github) => ManageRepository(runnerId, "add", github.Trim());
+
+    public Task<JsonElement> RemoveRepository(string runnerId, string github) => ManageRepository(runnerId, "remove", github);
+
+    private Task<JsonElement> ManageRepository(string runnerId, string action, string github)
+    {
+        if (!RepoName().IsMatch(github)) throw new HubException("Use owner/name, for example selise/deploy-config.");
+        var runner = registry.Get(runnerId) ?? throw new HubException("That runner is offline.");
+        if (runner.Owner.Sub != CurrentUser.Sub) throw new HubException("Only the runner's owner can add or remove its repositories.");
+        return AskRunner(runner, "ManageRepository", new { action, repo = github, from = CurrentUser });
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^[\w.-]+/[\w.-]+$")]
+    private static partial System.Text.RegularExpressions.Regex RepoName();
+
+    /// <summary>Sends a gh request to the runner, after checking the caller may use it for that repository.</summary>
+    private Task<JsonElement> AskGitHub(string runnerId, string github, object request)
     {
         var runner = registry.Get(runnerId) ?? throw new HubException("That runner is offline.");
         if (!runner.Registration.Repos.Any(repo => string.Equals(repo.Github, github, StringComparison.OrdinalIgnoreCase)))
-            throw new HubException($"Runner {runner.Registration.Name} has no clone of {github}.");
+            throw new HubException($"Runner {runner.Registration.Name} has no repository {github}.");
         if (!RunnerRegistry.MayUse(runner, CurrentUser))
             throw new HubException($"Runner {runner.Registration.Name} only accepts requests from its owner and the people its dispatch.accept lists.");
+        return AskRunner(runner, "GitHub", request);
+    }
 
+    /// <summary>Calls the runner and waits for its answer ({ ok, error?, ... }).</summary>
+    private async Task<JsonElement> AskRunner(Runner runner, string method, object request)
+    {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         try
         {
-            return await Clients.Client(runner.ConnectionId).InvokeAsync<JsonElement>("GitHub", request, timeout.Token);
+            return await Clients.Client(runner.ConnectionId).InvokeAsync<JsonElement>(method, request, timeout.Token);
         }
         catch (OperationCanceledException)
         {
@@ -139,7 +166,7 @@ public sealed class RunnersHub(RunnerRegistry registry, UserDirectory users, ILo
         catch (Exception error) when (error is not HubException)
         {
             log.LogWarning("gh request to {Runner} failed: {Error}", runner.Id, error.Message);
-            throw new HubException($"Runner {runner.Registration.Name} could not run gh ({error.Message}). Pull requests need kora 0.2.3 or newer and repo settings 0.2.5: run kora update there.");
+            throw new HubException($"Runner {runner.Registration.Name} could not answer ({error.Message}). It may need a newer kora (PRs 0.2.3, repo settings 0.2.5, adding repositories 0.2.6): run kora update there and restart kora start.");
         }
     }
 
