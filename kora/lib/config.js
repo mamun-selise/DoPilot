@@ -27,6 +27,12 @@ export function ensureHome() {
   mkdirSync(home, { recursive: true });
 }
 
+// The deployment (yml) repo shows only on the web app's Deploy to stage / prod pages. runner.yml's `yml` repo is one
+// unless it says `deployment: false`; any other repo is one when it says `deployment: true`.
+export function isDeployment(key, repo) {
+  return repo?.deployment ?? key === "yml";
+}
+
 export function loadRunner() {
   if (!existsSync(paths.runner)) return null;
   return YAML.parse(readFileSync(paths.runner, "utf8"));

@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import YAML from "yaml";
-import { home, paths } from "./config.js";
+import { home, isDeployment, paths } from "./config.js";
 import { board, setStage } from "./release.js";
 
 export const PR_FIELDS = [
@@ -291,9 +291,11 @@ export function setDeployment(request, runner) {
   else {
     try {
       const deployment = Boolean(request.deployment);
-      editRunnerYml((doc) => (deployment ? doc.setIn(["repos", key, "deployment"], true) : doc.deleteIn(["repos", key, "deployment"])));
+      // Write the flag only where the default does not already say it (`yml` defaults to a deployment repo).
+      const explicit = deployment !== isDeployment(key, {});
+      editRunnerYml((doc) => (explicit ? doc.setIn(["repos", key, "deployment"], deployment) : doc.deleteIn(["repos", key, "deployment"])));
       const { deployment: _old, ...rest } = runner.repos[key];
-      runner.repos = { ...runner.repos, [key]: deployment ? { ...rest, deployment: true } : rest };
+      runner.repos = { ...runner.repos, [key]: explicit ? { ...rest, deployment } : rest };
       answer = { ok: true, key, deployment };
     } catch (error) {
       answer = { ok: false, error: error.message };

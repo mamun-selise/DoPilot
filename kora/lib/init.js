@@ -8,7 +8,7 @@ import { ensureHome, paths } from "./config.js";
 
 const DEFAULT_BINARIES = ["git", "gh", "node", "npm", "npx", "dotnet"];
 
-// Flags (--name, --fe, --be, --repo key=path, --yes) skip the matching prompts.
+// Flags (--name, --fe, --be, --yml, --repo key=path, --yes) skip the matching prompts.
 export async function init(args) {
   const flags = parseFlags(args);
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -22,8 +22,10 @@ export async function init(args) {
 
     const name = flags.name || (await ask("Runner name (shown on the Runners page)", slug(userInfo().username)));
     const repos = {};
-    for (const key of ["fe", "be"]) {
-      const path = flags[key] ?? (await ask(`Path to your ${key.toUpperCase()} repository (blank to skip)`));
+    // yml is the deployment repository: the web app shows it only on Release > Deploy to stage / prod.
+    for (const key of ["fe", "be", "yml"]) {
+      const label = key === "yml" ? "deployment (yml)" : key.toUpperCase();
+      const path = flags[key] ?? (await ask(`Path to your ${label} repository (blank to skip)`));
       if (path) repos[key] = repo(path);
     }
     for (const [key, path] of flags.repos) repos[key] = repo(path);

@@ -56,9 +56,11 @@ commit to finish before the next, so each PR gets its own build and version. A f
 branch protection requires up-to-date branches, a PR left behind by the previous merge is updated and its checks
 awaited first. Progress shows on the board and in the `kora start` window.
 
-A repository marked `deployment: true` in `runner.yml` (kora 0.2.9+; tick **Deployment repo** when adding it, or
-use **Mark as deployment repo**) is a deployment (yml) repo: it shows only on **Release > Deploy to stage** and
-**Deploy to prod**, which list its PRs whose title mentions stage/staging or prod/production.
+The `yml` repo in `runner.yml` (asked for by `kora init` after FE and BE) is the deployment repo (kora 0.2.10+): it
+shows only on **Release > Deploy to stage** and **Deploy to prod**, which list its PRs whose title mentions
+stage/staging or prod/production. FE, BE and every other repo show everywhere else. Any other repo can be made a
+deployment repo with `deployment: true` (or **Deployment repo** / **Mark as deployment repo** in the web app), and
+`deployment: false` on `yml` turns the default off.
 
 ## Update
 

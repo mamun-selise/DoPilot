@@ -2,7 +2,7 @@
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { accessToken, session } from "./auth.js";
-import { loadRunner, paths, pkg, request, source } from "./config.js";
+import { isDeployment, loadRunner, paths, pkg, request, source } from "./config.js";
 
 export async function status() {
   const ok = (good, text) => console.log(`  ${good ? "✓" : "✗"} ${text}`);
@@ -28,11 +28,11 @@ export async function status() {
     ok(Boolean(runner.name), `name: ${runner.name ?? "<missing>"}`);
     for (const [key, repo] of Object.entries(runner.repos ?? {})) {
       if (!repo?.path && repo?.github) {
-        ok(true, `${key}: ${repo.github} — GitHub only (PRs and repo settings; no clone, so no tasks)${repo.deployment ? ", deployment repo" : ""}`);
+        ok(true, `${key}: ${repo.github} — GitHub only (PRs and repo settings; no clone, so no tasks)${isDeployment(key, repo) ? ", deployment repo" : ""}`);
         continue;
       }
       const isRepo = repo?.path && existsSync(repo.path) && run(`git -C "${repo.path}" rev-parse --git-dir`) !== null;
-      ok(isRepo, `${key}: ${repo?.path ?? "<no path>"}${repo?.github ? ` (${repo.github})` : ""}${isRepo ? "" : " — not a git repository"}`);
+      ok(isRepo, `${key}: ${repo?.path ?? "<no path>"}${repo?.github ? ` (${repo.github})` : ""}${isDeployment(key, repo) ? ", deployment repo" : ""}${isRepo ? "" : " — not a git repository"}`);
     }
   }
 

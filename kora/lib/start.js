@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import * as signalR from "@microsoft/signalr";
 import { accessToken, session } from "./auth.js";
-import { loadRunner, paths, pkg, source } from "./config.js";
+import { isDeployment, loadRunner, paths, pkg, source } from "./config.js";
 import { addLocalRepository, addRepository, github, localCandidates, log, removeRepository, setDeployment, who } from "./github.js";
 import { cancelMergeQueue, startMergeQueue } from "./release.js";
 
@@ -88,7 +88,7 @@ export async function start() {
         github: repo.github ?? null,
         branch: repo.path ? run(`git -C "${repo.path}" rev-parse --abbrev-ref HEAD`) : null,
         local: Boolean(repo.path),
-        deployment: Boolean(repo.deployment)
+        deployment: isDeployment(key, repo)
       })),
       agents: Object.keys(runner.agents ?? {}).filter((key) => runner.agents[key]?.enabled),
       concurrency,
