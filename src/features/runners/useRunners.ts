@@ -1,7 +1,6 @@
-import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
 import { useEffect, useState } from "react";
-import { getValidAccessToken } from "../../lib/blocks/auth";
 import { koraConfig } from "../../lib/kora/config";
+import { createKoraConnection, describeHubError as describe } from "../../lib/kora/hub";
 
 export type RunnerRepo = { key: string; github: string | null; branch?: string | null };
 
@@ -46,8 +45,7 @@ export type HubStatus = "unconfigured" | "connecting" | "online" | "reconnecting
 type State = { status: HubStatus; runners: Runner[]; error?: string };
 
 // Live list of connected KORA runners. The hub pushes RunnersChanged whenever a runner connects, disconnects,
-// or picks up / finishes a task. Auth: the browser's Blocks session cookie rides along (withCredentials); a
-// bearer token is sent too when the app happens to hold one.
+// or picks up / finishes a task.
 export function useRunners() {
   const [state, setState] = useState<State>({ status: koraConfig.hubUrl ? "connecting" : "unconfigured", runners: [] });
   const [attempt, setAttempt] = useState(0);
@@ -55,14 +53,7 @@ export function useRunners() {
   useEffect(() => {
     if (!koraConfig.hubUrl) return;
 
-    const connection = new HubConnectionBuilder()
-      .withUrl(koraConfig.hubUrl, {
-        withCredentials: true,
-        accessTokenFactory: async () => (await getValidAccessToken()) ?? ""
-      })
-      .withAutomaticReconnect()
-      .configureLogging(LogLevel.Warning)
-      .build();
+    const connection = createKoraConnection();
 
     let disposed = false;
     const update = (next: Partial<State>) => {
@@ -88,9 +79,4 @@ export function useRunners() {
   }, [attempt]);
 
   return { ...state, retry: () => setAttempt((value) => value + 1) };
-}
-
-function describe(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return /401|unauthorized/i.test(message) ? "The KORA backend did not accept your session. Sign in again." : message;
 }

@@ -35,6 +35,10 @@ kora start    # go online; tasks sent from the web app run here with your Claude
 `kora/<task>` branch, never in your clones. Claude may only run the commands listed in `exec.allowBinaries`,
 and only you can send tasks to your runner unless `dispatch.accept` lists other people.
 
+The web app's **PRs** page lists, approves and merges pull requests through a runner, with the GitHub CLI on
+that machine: install `gh` and run `gh auth login` there. Approvals and merges show as that `gh` account, and
+the same `dispatch.accept` rule decides who may use them. Needs kora 0.2.3 or newer.
+
 ## Update
 
 ```sh

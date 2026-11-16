@@ -54,6 +54,11 @@ public sealed record RunnerView(
     DateTimeOffset? LastActivityAt,
     IReadOnlyList<TaskSummary> CurrentTasks);
 
+/// <summary>A GitHub repository on the PRs page and the runners whose gh login can reach it.</summary>
+public sealed record PullRequestRepo(string Github, IReadOnlyList<PullRequestRoute> Runners);
+
+public sealed record PullRequestRoute(string RunnerId, string RunnerName, KoraUser Owner, string? GithubAccount);
+
 public enum KoraTaskState { Queued, Running, Succeeded, Failed }
 
 public sealed class KoraTask

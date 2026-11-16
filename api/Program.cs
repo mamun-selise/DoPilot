@@ -41,7 +41,12 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
     .AllowAnyHeader()
     .AllowAnyMethod()
     .AllowCredentials()));
-builder.Services.AddSignalR(options => options.MaximumReceiveMessageSize = 256 * 1024)
+builder.Services.AddSignalR(options =>
+    {
+        options.MaximumReceiveMessageSize = 256 * 1024;
+        // The PRs page waits on runners (gh) inside hub calls; let a slow list not hold up an approve or merge.
+        options.MaximumParallelInvocationsPerClient = 4;
+    })
     .AddJsonProtocol(options => options.PayloadSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 builder.Services.AddHttpClient();

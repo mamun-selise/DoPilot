@@ -67,6 +67,32 @@ public sealed class RunnerRegistry
     }
 
     public KoraTask? Task(string taskId) => _tasks.GetValueOrDefault(taskId);
+
+    /// <summary>
+    /// Mirrors the runner's own check (kora refuses everyone else): its owner, or someone its dispatch.accept lists.
+    /// </summary>
+    public static bool MayUse(Runner runner, KoraUser user) =>
+        runner.Owner.Sub == user.Sub
+        || (runner.Registration.DispatchAccept ?? []).Any(who => who == user.Sub || who == user.Email);
+
+    /// <summary>
+    /// The GitHub repositories this user can reach through runners they may use, each with those runners
+    /// (the user's own first). The PRs page lists these; the runner's gh login does the GitHub calls.
+    /// </summary>
+    public IReadOnlyList<PullRequestRepo> PullRequestRepos(KoraUser user) => _runners.Values
+        .Where(runner => MayUse(runner, user))
+        .SelectMany(runner => runner.Registration.Repos
+            .Where(repo => !string.IsNullOrEmpty(repo.Github))
+            .Select(repo => (Github: repo.Github!, Runner: runner)))
+        .GroupBy(entry => entry.Github, StringComparer.OrdinalIgnoreCase)
+        .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+        .Select(group => new PullRequestRepo(group.Key, group
+            .DistinctBy(entry => entry.Runner.Id)
+            .OrderByDescending(entry => entry.Runner.Owner.Sub == user.Sub)
+            .ThenBy(entry => entry.Runner.Registration.Name)
+            .Select(entry => new PullRequestRoute(entry.Runner.Id, entry.Runner.Registration.Name, entry.Runner.Owner, entry.Runner.Registration.GithubAccount))
+            .ToList()))
+        .ToList();
 }
 
 public sealed record Runner(string Id, string ConnectionId, KoraUser Owner, RunnerRegistration Registration, DateTimeOffset ConnectedAt);

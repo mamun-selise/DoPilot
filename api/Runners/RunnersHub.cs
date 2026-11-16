@@ -90,6 +90,47 @@ public sealed class RunnersHub(RunnerRegistry registry, UserDirectory users, ILo
         await Clients.Client(runner.ConnectionId).SendAsync("CancelTask", taskId);
     }
 
+    // ---- pull requests: gh runs on a runner's machine, with that machine's GitHub login ----
+
+    public IReadOnlyList<PullRequestRepo> PullRequestRepos() => registry.PullRequestRepos(CurrentUser);
+
+    public Task<JsonElement> ListPullRequests(string runnerId, string github) =>
+        AskGitHub(runnerId, github, new { action = "list", repo = github, from = CurrentUser });
+
+    public Task<JsonElement> ApprovePullRequest(string runnerId, string github, int number, string? body) =>
+        AskGitHub(runnerId, github, new { action = "approve", repo = github, number, body, from = CurrentUser });
+
+    public Task<JsonElement> MergePullRequest(string runnerId, string github, int number, string method, bool deleteBranch)
+    {
+        if (method is not ("merge" or "squash" or "rebase")) throw new HubException("Merge method must be merge, squash or rebase.");
+        return AskGitHub(runnerId, github, new { action = "merge", repo = github, number, method, deleteBranch, from = CurrentUser });
+    }
+
+    /// <summary>Sends a gh request to the runner and waits for its answer ({ ok, error?, ... }).</summary>
+    private async Task<JsonElement> AskGitHub(string runnerId, string github, object request)
+    {
+        var runner = registry.Get(runnerId) ?? throw new HubException("That runner is offline.");
+        if (!runner.Registration.Repos.Any(repo => string.Equals(repo.Github, github, StringComparison.OrdinalIgnoreCase)))
+            throw new HubException($"Runner {runner.Registration.Name} has no clone of {github}.");
+        if (!RunnerRegistry.MayUse(runner, CurrentUser))
+            throw new HubException($"Runner {runner.Registration.Name} only accepts requests from its owner and the people its dispatch.accept lists.");
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        try
+        {
+            return await Clients.Client(runner.ConnectionId).InvokeAsync<JsonElement>("GitHub", request, timeout.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            throw new HubException($"Runner {runner.Registration.Name} did not answer within a minute.");
+        }
+        catch (Exception error) when (error is not HubException)
+        {
+            log.LogWarning("gh request to {Runner} failed: {Error}", runner.Id, error.Message);
+            throw new HubException($"Runner {runner.Registration.Name} could not run gh ({error.Message}). Pull requests need kora 0.2.3 or newer: run kora update there.");
+        }
+    }
+
     // ---- helpers ----
 
     /// <summary>Forwards a runner's report to the task's sender, after checking it came from that task's runner.</summary>

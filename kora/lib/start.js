@@ -7,6 +7,7 @@ import { createInterface } from "node:readline";
 import * as signalR from "@microsoft/signalr";
 import { accessToken, session } from "./auth.js";
 import { loadRunner, paths, pkg, source } from "./config.js";
+import { github } from "./github.js";
 
 export async function start() {
   const runner = loadRunner();
@@ -39,6 +40,11 @@ export async function start() {
       connection.invoke("TaskCompleted", taskId, { ok: false, error: "Cancelled before it started." }).catch(() => {});
     }
   });
+
+  // The PRs page: list, approve and merge with this machine's gh login. The return value is the answer.
+  connection.on("GitHub", (request) =>
+    accepts(request?.from, runner, me) ? github(request, runner) : { ok: false, error: notAccepted(request?.from) }
+  );
 
   const claudeVersion = run("claude --version")?.split(" ")[0] ?? null;
   // Re-read on every (re)connect so the Runners page shows each clone's current branch.
@@ -91,13 +97,20 @@ export async function start() {
   }
 }
 
-// Only the runner's owner may send tasks unless runner.yml's dispatch.accept lists the sender.
 function refuse(task, runner, me) {
   if (!runner.repos?.[task.repo]) return `Repository "${task.repo}" is not in this runner's runner.yml.`;
-  const from = task.from ?? {};
-  if (from.sub && from.sub === me.sub) return null;
-  const accepted = (runner.dispatch?.accept ?? []).some((rule) => (rule.from ?? []).some((who) => who === from.email || who === from.sub));
-  return accepted ? null : `This runner only accepts tasks from its owner (dispatch.accept does not list ${from.email || "the sender"}).`;
+  return accepts(task.from, runner, me) ? null : notAccepted(task.from);
+}
+
+// Only the runner's owner may use it unless runner.yml's dispatch.accept lists the sender.
+function accepts(from, runner, me) {
+  from ??= {};
+  if (from.sub && from.sub === me.sub) return true;
+  return (runner.dispatch?.accept ?? []).some((rule) => (rule.from ?? []).some((who) => who === from.email || who === from.sub));
+}
+
+function notAccepted(from) {
+  return `This runner only accepts requests from its owner (dispatch.accept does not list ${from?.email || "the sender"}).`;
 }
 
 async function runTask(task, runner, connection, running) {
