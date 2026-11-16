@@ -10,6 +10,7 @@ import { PullRequestsPage } from "../../features/pullRequests/PullRequestsPage";
 import { RepoSettingsPage } from "../../features/repoSettings/RepoSettingsPage";
 import { ReadyToStagePage } from "../../features/release/ReadyToStagePage";
 import { DeployToProdPage, DeployToStagePage } from "../../features/release/DeployPages";
+import { EnvironmentsPage } from "../../features/release/EnvironmentsPage";
 import { RunnersPage } from "../../features/runners/RunnersPage";
 
 const protectedRoutes = {
@@ -20,6 +21,7 @@ const protectedRoutes = {
   "/release/stage": ReadyToStagePage,
   "/release/deploy-stage": DeployToStagePage,
   "/release/deploy-prod": DeployToProdPage,
+  "/release/environments": EnvironmentsPage,
   "/error": ErrorPage
 };
 

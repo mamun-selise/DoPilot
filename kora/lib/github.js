@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import YAML from "yaml";
 import { home, isDeployment, paths } from "./config.js";
+import { deployEnvironment, environments } from "./environments.js";
 import { board, setStage } from "./release.js";
 
 export const PR_FIELDS = [
@@ -40,6 +41,8 @@ export async function github(request, runner) {
   if (!answer.ok) log(`  ✗ failed: ${answer.error} ${took}`);
   else if (answer.pullRequests) log(`  ✓ ${answer.pullRequests.length} open pull request(s) ${took}`);
   else if (request.action === "settings") log(`  ✓ settings read ${took}`);
+  else if (request.action === "environments") log(`  ✓ ${answer.environments.services.length} service(s) read ${took}`);
+  else if (request.action === "deployEnv") log(`  ✓ ${answer.deployment.merged ? "merged" : "opened"} ${answer.deployment.title} ${took}`);
   else if (request.action === "board") log(`  ✓ board: ${answer.board.open.length} open, ${answer.board.merged.length} merged ${took}`);
   else if (request.action === "stage") log(`  ✓ ${request.ready ? "marked ready for stage" : "moved back to open"} ${took}`);
   else if (request.action === "editSettings") log(`  ✓ ${answer.changed ? `updated: ${answer.changed}` : "nothing to change"} ${took}`);
@@ -67,6 +70,8 @@ async function handle(request, runner) {
       return { ok: true, pullRequests: JSON.parse(out).map(summarize) };
     }
     if (request.action === "board") return { ok: true, board: await board(repo) };
+    if (request.action === "environments") return { ok: true, environments: await environments(repo) };
+    if (request.action === "deployEnv") return { ok: true, deployment: await deployEnvironment(repo, request.deployment ?? {}, request.from) };
     if (request.action === "settings") return { ok: true, settings: await readSettings(repo) };
     if (request.action === "editSettings") return await editSettings(repo, request.changes ?? {});
 
@@ -325,16 +330,18 @@ function editRunnerYml(change) {
 
 // No shell, so titles and review text never reach a command line. Runs in KORA's home, not a clone: with
 // --delete-branch, gh would otherwise switch and delete branches in whatever repository it was started in.
-// quiet: leave the command out of the kora start window (polling); timeout: for long waits such as gh pr checks --watch.
-export function gh(args, { quiet = false, timeout = 45_000 } = {}) {
+// quiet: leave the command out of the kora start window (polling); timeout: for long waits such as gh pr checks --watch;
+// input: written to gh's stdin (for --input -).
+export function gh(args, { quiet = false, timeout = 45_000, input } = {}) {
   if (!quiet) log(`  $ gh ${args.map((arg) => (arg === PR_FIELDS ? "<fields>" : /[\s"]/.test(arg) ? JSON.stringify(arg) : arg)).join(" ")}`);
   mkdirSync(home, { recursive: true });
   return new Promise((resolve, reject) => {
-    execFile("gh", args, { cwd: home, timeout, maxBuffer: 10 * 1024 * 1024, env: { ...process.env, GH_PROMPT_DISABLED: "1" } }, (error, stdout, stderr) => {
+    const child = execFile("gh", args, { cwd: home, timeout, maxBuffer: 10 * 1024 * 1024, env: { ...process.env, GH_PROMPT_DISABLED: "1" } }, (error, stdout, stderr) => {
       if (!error) return resolve(stdout);
       if (error.code === "ENOENT") return reject(new Error("GitHub CLI (gh) is not installed on this runner."));
       reject(new Error(stderr.trim() || error.message));
     });
+    if (input !== undefined) child.stdin.end(input);
   });
 }
 

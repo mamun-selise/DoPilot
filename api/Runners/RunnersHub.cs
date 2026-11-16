@@ -193,8 +193,23 @@ public sealed partial class RunnersHub(RunnerRegistry registry, ReleaseQueues qu
         catch (Exception error) when (error is not HubException)
         {
             log.LogWarning("gh request to {Runner} failed: {Error}", runner.Id, error.Message);
-            throw new HubException($"Runner {runner.Registration.Name} could not answer ({error.Message}). It may need a newer kora (PRs 0.2.3, repo settings 0.2.5, adding repositories 0.2.6, local clones 0.2.7, deployment repos 0.2.9): run kora update there and restart kora start.");
+            throw new HubException($"Runner {runner.Registration.Name} could not answer ({error.Message}). It may need a newer kora (PRs 0.2.3, repo settings 0.2.5, adding repositories 0.2.6, local clones 0.2.7, deployment repos 0.2.9, environments 0.2.11): run kora update there and restart kora start.");
         }
+    }
+
+    // ---- Release > Environments (kora 0.2.11+): what dev / stage / prod run in a deployment (yml) repo ----
+
+    public Task<JsonElement> Environments(string runnerId, string github) =>
+        AskGitHub(runnerId, github, new { action = "environments", repo = github, from = CurrentUser });
+
+    /// <summary>
+    /// Opens a promote or rollback PR in the deployment repo (and merges it when asked): { service, env: stg|production,
+    /// kind: promote|rollback, image, merge }. The runner re-reads the repo and checks the image before changing anything.
+    /// </summary>
+    public Task<JsonElement> DeployEnvironment(string runnerId, string github, JsonElement deployment)
+    {
+        if (deployment.ValueKind != JsonValueKind.Object) throw new HubException("The deployment must be an object.");
+        return AskGitHub(runnerId, github, new { action = "deployEnv", repo = github, deployment, from = CurrentUser });
     }
 
     // ---- Release > Ready to stage (kora 0.2.8+). The board lives on GitHub as labels; merge queues run on a runner ----

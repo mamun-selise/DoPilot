@@ -62,6 +62,12 @@ stage/staging or prod/production. FE, BE and every other repo show everywhere el
 deployment repo with `deployment: true` (or **Deployment repo** / **Mark as deployment repo** in the web app), and
 `deployment: false` on `yml` turns the default off.
 
+**Release > Environments** (kora 0.2.11+) reads the deployment repo's `<service>/dev|stg|production/*.txt` image
+lists (the last line is what runs) and shows, per service, what each environment runs and whether stage is behind or
+ahead of dev, and prod of stage. **Promote** and **Rollback** open a deploy PR in the repo's usual format (e.g. branch
+`webservice-stg-1992`, title `Webservice - Deploy to STAGE - v1.349.0`) that appends the chosen image line; merging it
+runs that environment's deploy workflow. The runner re-reads the repo first and refuses stale or unknown images.
+
 ## Update
 
 ```sh
