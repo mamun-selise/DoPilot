@@ -33,7 +33,7 @@ export type PullRequest = {
 
 export type MergeMethod = "merge" | "squash" | "rebase";
 
-type GitHubAnswer = { ok: boolean; error?: string | null; pullRequests?: PullRequest[]; settings?: unknown; github?: string | null; candidates?: unknown };
+type GitHubAnswer = { ok: boolean; error?: string | null; pullRequests?: PullRequest[]; settings?: unknown; github?: string | null; candidates?: unknown; board?: unknown };
 
 // ownRunners: the user's own runners, the ones they may add repositories to.
 type State = { status: HubStatus; repos: PullRequestRepo[]; ownRunners: PullRequestRoute[]; error?: string };
@@ -44,12 +44,17 @@ export function usePullRequestHub() {
   const [state, setState] = useState<State>({ status: koraConfig.hubUrl ? "connecting" : "unconfigured", repos: [], ownRunners: [] });
   const [attempt, setAttempt] = useState(0);
   const connectionRef = useRef<HubConnection | null>(null);
+  // Handlers pages add with on(); bound to every connection this hook makes, so they survive a reconnect attempt.
+  const listenersRef = useRef(new Map<string, Set<(...args: unknown[]) => void>>());
+  const bind = (connection: HubConnection, event: string) =>
+    connection.on(event, (...args: unknown[]) => listenersRef.current.get(event)?.forEach((handler) => handler(...args)));
 
   useEffect(() => {
     if (!koraConfig.hubUrl) return;
 
     const connection = createKoraConnection();
     connectionRef.current = connection;
+    for (const event of listenersRef.current.keys()) bind(connection, event);
     let disposed = false;
     const update = (next: Partial<State>) => {
       if (!disposed) setState((current) => ({ ...current, ...next }));
@@ -99,7 +104,29 @@ export function usePullRequestHub() {
     return answer;
   }, []);
 
-  return { ...state, askGitHub, retry: () => setAttempt((value) => value + 1) };
+  // A plain hub call, for methods that do not answer { ok, error }.
+  const invoke = useCallback(async <T,>(method: string, ...args: unknown[]) => {
+    const connection = connectionRef.current;
+    if (!connection) throw new Error("Not connected to the KORA backend.");
+    try {
+      return await connection.invoke<T>(method, ...args);
+    } catch (error) {
+      throw new Error(describeHubError(error));
+    }
+  }, []);
+
+  // Subscribes to a hub event; returns the unsubscribe.
+  const on = useCallback((event: string, handler: (...args: unknown[]) => void) => {
+    let handlers = listenersRef.current.get(event);
+    if (!handlers) {
+      listenersRef.current.set(event, (handlers = new Set()));
+      if (connectionRef.current) bind(connectionRef.current, event);
+    }
+    handlers.add(handler);
+    return () => void handlers.delete(handler);
+  }, []);
+
+  return { ...state, askGitHub, invoke, on, retry: () => setAttempt((value) => value + 1) };
 }
 
 type AskGitHub = ReturnType<typeof usePullRequestHub>["askGitHub"];

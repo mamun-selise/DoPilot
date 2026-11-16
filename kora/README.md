@@ -49,6 +49,13 @@ need a clone, so they are refused. Only the runner's owner can add or remove the
 folders, or type the path. It is saved as `key: { path, github }` and takes tasks too. Picking the clone of a
 GitHub-only repository gives that entry its path.
 
+**Release > Ready to stage** (kora 0.2.8+) is a board kept on GitHub as labels: `ready-for-stage` on an open PR
+puts it in Ready to stage, and `deployed-to-stage` marks a merged PR whose build succeeded. **Merge** runs a queue
+on this runner: it merges the PRs one at a time and, after each, waits for every GitHub Actions run on the merge
+commit to finish before the next, so each PR gets its own build and version. A failed build stops the queue. If
+branch protection requires up-to-date branches, a PR left behind by the previous merge is updated and its checks
+awaited first. Progress shows on the board and in the `kora start` window.
+
 ## Update
 
 ```sh

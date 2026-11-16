@@ -6,8 +6,9 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import YAML from "yaml";
 import { home, paths } from "./config.js";
+import { board, setStage } from "./release.js";
 
-const PR_FIELDS = [
+export const PR_FIELDS = [
   "number", "title", "url", "author", "isDraft", "headRefName", "baseRefName", "createdAt", "updatedAt",
   "additions", "deletions", "changedFiles", "labels", "reviewDecision", "mergeable", "mergeStateStatus", "statusCheckRollup"
 ].join(",");
@@ -39,6 +40,8 @@ export async function github(request, runner) {
   if (!answer.ok) log(`  ✗ failed: ${answer.error} ${took}`);
   else if (answer.pullRequests) log(`  ✓ ${answer.pullRequests.length} open pull request(s) ${took}`);
   else if (request.action === "settings") log(`  ✓ settings read ${took}`);
+  else if (request.action === "board") log(`  ✓ board: ${answer.board.open.length} open, ${answer.board.merged.length} merged ${took}`);
+  else if (request.action === "stage") log(`  ✓ ${request.ready ? "marked ready for stage" : "moved back to open"} ${took}`);
   else if (request.action === "editSettings") log(`  ✓ ${answer.changed ? `updated: ${answer.changed}` : "nothing to change"} ${took}`);
   else log(`  ✓ ${request.action === "approve" ? "approved" : `merged (${request.method})`} ${took}`);
   return answer;
@@ -63,12 +66,17 @@ async function handle(request, runner) {
       const out = await gh(["pr", "list", "--repo", repo, "--state", "open", "--limit", "100", "--json", PR_FIELDS]);
       return { ok: true, pullRequests: JSON.parse(out).map(summarize) };
     }
+    if (request.action === "board") return { ok: true, board: await board(repo) };
     if (request.action === "settings") return { ok: true, settings: await readSettings(repo) };
     if (request.action === "editSettings") return await editSettings(repo, request.changes ?? {});
 
     const number = Number(request.number);
     if (!Number.isInteger(number) || number <= 0) return { ok: false, error: "A pull request number is required." };
 
+    if (request.action === "stage") {
+      await setStage(repo, number, Boolean(request.ready));
+      return { ok: true };
+    }
     if (request.action === "approve") {
       const body = typeof request.body === "string" && request.body.trim() ? ["--body", request.body.trim()] : [];
       await gh(["pr", "review", String(number), "--repo", repo, "--approve", ...body]);
@@ -292,11 +300,12 @@ function editRunnerYml(change) {
 
 // No shell, so titles and review text never reach a command line. Runs in KORA's home, not a clone: with
 // --delete-branch, gh would otherwise switch and delete branches in whatever repository it was started in.
-function gh(args) {
-  log(`  $ gh ${args.map((arg) => (arg === PR_FIELDS ? "<fields>" : /[\s"]/.test(arg) ? JSON.stringify(arg) : arg)).join(" ")}`);
+// quiet: leave the command out of the kora start window (polling); timeout: for long waits such as gh pr checks --watch.
+export function gh(args, { quiet = false, timeout = 45_000 } = {}) {
+  if (!quiet) log(`  $ gh ${args.map((arg) => (arg === PR_FIELDS ? "<fields>" : /[\s"]/.test(arg) ? JSON.stringify(arg) : arg)).join(" ")}`);
   mkdirSync(home, { recursive: true });
   return new Promise((resolve, reject) => {
-    execFile("gh", args, { cwd: home, timeout: 45_000, maxBuffer: 10 * 1024 * 1024, env: { ...process.env, GH_PROMPT_DISABLED: "1" } }, (error, stdout, stderr) => {
+    execFile("gh", args, { cwd: home, timeout, maxBuffer: 10 * 1024 * 1024, env: { ...process.env, GH_PROMPT_DISABLED: "1" } }, (error, stdout, stderr) => {
       if (!error) return resolve(stdout);
       if (error.code === "ENOENT") return reject(new Error("GitHub CLI (gh) is not installed on this runner."));
       reject(new Error(stderr.trim() || error.message));
@@ -304,7 +313,7 @@ function gh(args) {
   });
 }
 
-function summarize(pr) {
+export function summarize(pr) {
   return {
     number: pr.number,
     title: pr.title,

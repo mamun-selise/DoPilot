@@ -1,13 +1,14 @@
-import { Activity, PanelLeft } from "lucide-react";
+import { Activity, ChevronDown, ChevronRight, PanelLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { LanguageSwitcher } from "./LanguageSwitcher";
-import { navItems } from "./navItems";
+import { findNav, isGroup, navItems, type NavLink } from "./navItems";
 import { NotificationsMenu } from "./NotificationsMenu";
 import { UserMenu } from "./UserMenu";
 import { useT } from "../../lib/i18n/LocalizationProvider";
 
 const COLLAPSED_KEY = "blocks-app:sidebar-collapsed";
+const CLOSED_GROUPS_KEY = "blocks-app:nav-closed-groups";
 const MOBILE_QUERY = "(max-width: 880px)";
 
 function useIsMobile(): boolean {
@@ -31,7 +32,37 @@ export function AppShell({ activePath, children, onNavigate }: { activePath: str
   // no separate hamburger/drawer/scrim needed, and no dead-end state where
   // nothing on screen can bring navigation back.
   const collapsed = collapsedPref || isMobile;
-  const activeItem = navItems.find((item) => item.href === activePath);
+  const active = findNav(activePath);
+  // Groups are open unless the user closed them; the group holding the current page always shows its links.
+  const [closedGroups, setClosedGroups] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(CLOSED_GROUPS_KEY) ?? "[]") as string[];
+    } catch {
+      return [];
+    }
+  });
+  const toggleGroup = (id: string) =>
+    setClosedGroups((current) => {
+      const next = current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id];
+      localStorage.setItem(CLOSED_GROUPS_KEY, JSON.stringify(next));
+      return next;
+    });
+
+  const renderLink = (item: NavLink, sub = false) => (
+    <a
+      key={item.href}
+      href={item.href}
+      data-tooltip={t(item.labelKey)}
+      className={[activePath === item.href ? "active" : "", sub ? "sub" : ""].join(" ").trim()}
+      onClick={(event) => {
+        event.preventDefault();
+        onNavigate(item.href);
+      }}
+    >
+      <item.icon size={sub ? 16 : 18} />
+      {collapsed ? null : <span>{t(item.labelKey)}</span>}
+    </a>
+  );
 
   useEffect(() => {
     localStorage.setItem(COLLAPSED_KEY, String(collapsedPref));
@@ -55,29 +86,31 @@ export function AppShell({ activePath, children, onNavigate }: { activePath: str
           </button>
         </div>
         <nav>
-          {navItems.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              data-tooltip={t(item.labelKey)}
-              className={activePath === item.href ? "active" : ""}
-              onClick={(event) => {
-                event.preventDefault();
-                onNavigate(item.href);
-              }}
-            >
-              <item.icon size={18} />
-              {collapsed ? null : <span>{t(item.labelKey)}</span>}
-            </a>
-          ))}
+          {navItems.map((item) => {
+            if (!isGroup(item)) return renderLink(item);
+            // The icon-only rail has no room for headings: it shows the group's links, set off by a divider.
+            if (collapsed) return <div className="nav-group-rail" key={item.id}>{item.children.map((child) => renderLink(child))}</div>;
+            const open = !closedGroups.includes(item.id) || active?.group === item;
+            return (
+              <div className="nav-group" key={item.id}>
+                <button className={`nav-group-heading${active?.group === item ? " has-active" : ""}`} onClick={() => toggleGroup(item.id)} aria-expanded={open}>
+                  <item.icon size={18} />
+                  <span>{t(item.labelKey)}</span>
+                  {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </button>
+                {open ? item.children.map((child) => renderLink(child, true)) : null}
+              </div>
+            );
+          })}
         </nav>
       </aside>
       <div className="content">
         <header className="topbar">
-          {activeItem ? (
+          {active ? (
             <div className="breadcrumb">
-              <activeItem.icon size={16} />
-              <span>{t(activeItem.labelKey)}</span>
+              <active.link.icon size={16} />
+              {active.group ? <span className="breadcrumb-parent">{t(active.group.labelKey)} /</span> : null}
+              <span>{t(active.link.labelKey)}</span>
             </div>
           ) : null}
           <div className="topbar-spacer" />

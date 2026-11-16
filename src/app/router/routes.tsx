@@ -8,6 +8,7 @@ import { NotFoundPage } from "../../features/auth/NotFoundPage";
 import { ProfilePage } from "../../features/profile/ProfilePage";
 import { PullRequestsPage } from "../../features/pullRequests/PullRequestsPage";
 import { RepoSettingsPage } from "../../features/repoSettings/RepoSettingsPage";
+import { ReadyToStagePage } from "../../features/release/ReadyToStagePage";
 import { RunnersPage } from "../../features/runners/RunnersPage";
 
 const protectedRoutes = {
@@ -15,6 +16,7 @@ const protectedRoutes = {
   "/runners": RunnersPage,
   "/prs": PullRequestsPage,
   "/repo-settings": RepoSettingsPage,
+  "/release/stage": ReadyToStagePage,
   "/error": ErrorPage
 };
 

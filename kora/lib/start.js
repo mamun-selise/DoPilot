@@ -8,6 +8,7 @@ import * as signalR from "@microsoft/signalr";
 import { accessToken, session } from "./auth.js";
 import { loadRunner, paths, pkg, source } from "./config.js";
 import { addLocalRepository, addRepository, github, localCandidates, log, removeRepository, who } from "./github.js";
+import { cancelMergeQueue, startMergeQueue } from "./release.js";
 
 export async function start() {
   const runner = loadRunner();
@@ -47,6 +48,16 @@ export async function start() {
     log(`GitHub ${request?.action} ${request?.repo} — refused: ${who(request?.from)} is not in dispatch.accept`);
     return { ok: false, error: notAccepted(request?.from) };
   });
+
+  // Release > Ready to stage: merge the queued PRs one at a time, each after the previous one's build finished.
+  // Answers at once; progress goes back with MergeQueueProgress.
+  connection.on("MergeQueue", (request) => {
+    if (!accepts(request?.from, runner, me)) return { ok: false, error: notAccepted(request?.from) };
+    const known = Object.values(runner.repos ?? {}).some((repo) => repo.github?.toLowerCase() === String(request?.repo).toLowerCase());
+    if (!known) return { ok: false, error: `${request?.repo} is not a repository in this runner's runner.yml.` };
+    return startMergeQueue(request, (update) => connection.invoke("MergeQueueProgress", request.queueId, update).catch(() => {}));
+  });
+  connection.on("CancelMergeQueue", (queueId) => cancelMergeQueue(queueId));
 
   // Add/remove a GitHub-only repository from the web app. Only the owner may change what this machine offers.
   connection.on("ManageRepository", async (request) => {

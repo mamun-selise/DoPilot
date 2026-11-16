@@ -52,6 +52,7 @@ builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.C
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton(kora);
 builder.Services.AddSingleton<RunnerRegistry>();
+builder.Services.AddSingleton<ReleaseQueues>();
 builder.Services.AddSingleton<UserDirectory>();
 
 builder.Services.AddResponseCompression(options => options.EnableForHttps = true);

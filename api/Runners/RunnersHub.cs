@@ -9,7 +9,7 @@ namespace DoPilot.Api.Runners;
 /// runners and dispatches tasks. Each runner decides for itself whose tasks it accepts (runner.yml dispatch.accept).
 /// </summary>
 [Authorize]
-public sealed partial class RunnersHub(RunnerRegistry registry, UserDirectory users, ILogger<RunnersHub> log) : Hub
+public sealed partial class RunnersHub(RunnerRegistry registry, ReleaseQueues queues, UserDirectory users, ILogger<RunnersHub> log) : Hub
 {
     private const string Watchers = "watchers";
 
@@ -29,6 +29,11 @@ public sealed partial class RunnersHub(RunnerRegistry registry, UserDirectory us
             log.LogInformation("Runner {Runner} disconnected", runner.Id);
             foreach (var task in orphaned)
                 await Clients.Group(UserGroup(task.From.Sub)).SendAsync("TaskCompleted", task.Id, new { ok = false, error = "The runner went offline." });
+            foreach (var queue in queues.RunningOn(runner.Id))
+            {
+                queue.RunnerOffline("The runner went offline.");
+                await BroadcastQueue(queue);
+            }
             await BroadcastRunners();
         }
         await base.OnDisconnectedAsync(exception);
@@ -187,6 +192,98 @@ public sealed partial class RunnersHub(RunnerRegistry registry, UserDirectory us
             throw new HubException($"Runner {runner.Registration.Name} could not answer ({error.Message}). It may need a newer kora (PRs 0.2.3, repo settings 0.2.5, adding repositories 0.2.6, local clones 0.2.7): run kora update there and restart kora start.");
         }
     }
+
+    // ---- Release > Ready to stage (kora 0.2.8+). The board lives on GitHub as labels; merge queues run on a runner ----
+
+    public Task<JsonElement> ReleaseBoard(string runnerId, string github) =>
+        AskGitHub(runnerId, github, new { action = "board", repo = github, from = CurrentUser });
+
+    /// <summary>Moves a PR between "Open" and "Ready to stage" by adding or removing its ready-for-stage label.</summary>
+    public Task<JsonElement> SetReadyForStage(string runnerId, string github, int number, bool ready) =>
+        AskGitHub(runnerId, github, new { action = "stage", repo = github, number, ready, from = CurrentUser });
+
+    /// <summary>Joins the repository's board group for MergeQueueChanged, and returns its latest queue.</summary>
+    public async Task<ReleaseQueueView?> WatchRelease(string github)
+    {
+        if (!registry.PullRequestRepos(CurrentUser).Any(repo => string.Equals(repo.Github, github, StringComparison.OrdinalIgnoreCase)))
+            throw new HubException($"You have no runner for {github}.");
+        await Groups.AddToGroupAsync(Context.ConnectionId, ReleaseGroup(github));
+        return queues.Latest(github)?.View();
+    }
+
+    public Task StopWatchingRelease(string github) => Groups.RemoveFromGroupAsync(Context.ConnectionId, ReleaseGroup(github));
+
+    /// <summary>Starts merging the PRs in this order, one at a time; only one queue runs per repository.</summary>
+    public async Task<ReleaseQueueView> StartMergeQueue(string runnerId, string github, IReadOnlyList<ReleaseQueueRequestItem> items, string method, bool deleteBranch)
+    {
+        if (method is not ("merge" or "squash" or "rebase")) throw new HubException("Merge method must be merge, squash or rebase.");
+        if (items.Count == 0) throw new HubException("Move pull requests to Ready to stage first.");
+        if (items.Count > 50 || items.Select(item => item.Number).Distinct().Count() != items.Count) throw new HubException("The queue needs up to 50 different pull requests.");
+        var runner = registry.Get(runnerId) ?? throw new HubException("That runner is offline.");
+        if (!runner.Registration.Repos.Any(repo => string.Equals(repo.Github, github, StringComparison.OrdinalIgnoreCase)))
+            throw new HubException($"Runner {runner.Registration.Name} has no repository {github}.");
+        if (!RunnerRegistry.MayUse(runner, CurrentUser))
+            throw new HubException($"Runner {runner.Registration.Name} only accepts requests from its owner and the people its dispatch.accept lists.");
+
+        var queue = new ReleaseQueue
+        {
+            Id = Guid.NewGuid().ToString("n"),
+            Repo = github,
+            RunnerId = runner.Id,
+            RunnerName = runner.Registration.Name,
+            StartedBy = CurrentUser,
+            Method = method,
+            Items = items.Select(item => new ReleaseQueueItem { Number = item.Number, Title = item.Title }).ToList()
+        };
+        if (queues.TryStart(queue) is { } running)
+            throw new HubException($"A merge queue is already running for {github} (started by {running.StartedBy.Email ?? running.StartedBy.Sub}).");
+
+        JsonElement answer;
+        try
+        {
+            answer = await AskRunner(runner, "MergeQueue", new
+            {
+                queueId = queue.Id, repo = github, numbers = items.Select(item => item.Number), method, deleteBranch, from = CurrentUser
+            });
+        }
+        catch
+        {
+            queues.Remove(queue.Id);
+            throw;
+        }
+        if (!answer.TryGetProperty("ok", out var ok) || ok.ValueKind != JsonValueKind.True)
+        {
+            queues.Remove(queue.Id);
+            throw new HubException(answer.TryGetProperty("error", out var error) ? error.GetString() : "The runner did not start the queue.");
+        }
+        log.LogInformation("Merge queue {Queue} for {Repo} on {Runner} started by {User}", queue.Id, github, runner.Id, CurrentUser.Sub);
+        await BroadcastQueue(queue);
+        return queue.View();
+    }
+
+    /// <summary>Stops the queue after the PR it is working on; only who started it or the runner's owner may.</summary>
+    public async Task CancelMergeQueue(string queueId)
+    {
+        var queue = queues.Get(queueId) ?? throw new HubException("Unknown merge queue.");
+        var runner = registry.Get(queue.RunnerId) ?? throw new HubException("That runner is offline.");
+        if (queue.StartedBy.Sub != CurrentUser.Sub && runner.Owner.Sub != CurrentUser.Sub)
+            throw new HubException("Only who started the queue or the runner's owner can cancel it.");
+        await Clients.Client(runner.ConnectionId).SendAsync("CancelMergeQueue", queueId);
+    }
+
+    /// <summary>Runner side: progress of a merge queue, accepted only from the runner running it.</summary>
+    public async Task MergeQueueProgress(string queueId, JsonElement update)
+    {
+        var queue = queues.Get(queueId) ?? throw new HubException("Unknown merge queue.");
+        var runner = registry.ByConnection(Context.ConnectionId);
+        if (runner is null || runner.Id != queue.RunnerId) throw new HubException("This connection is not running that queue.");
+        queue.Apply(update);
+        await BroadcastQueue(queue);
+    }
+
+    private Task BroadcastQueue(ReleaseQueue queue) => Clients.Group(ReleaseGroup(queue.Repo)).SendAsync("MergeQueueChanged", queue.View());
+
+    private static string ReleaseGroup(string github) => $"release:{github.ToLowerInvariant()}";
 
     // ---- helpers ----
 
