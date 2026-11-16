@@ -41,10 +41,10 @@ export async function start() {
     }
   });
 
-  // The PRs page: list, approve and merge with this machine's gh login. The return value is the answer.
+  // The PRs and Repo settings pages, done with this machine's gh login. The return value is the answer.
   connection.on("GitHub", (request) => {
     if (accepts(request?.from, runner, me)) return github(request, runner);
-    log(`PR ${request?.action} ${request?.repo} — refused: ${who(request?.from)} is not in dispatch.accept`);
+    log(`GitHub ${request?.action} ${request?.repo} — refused: ${who(request?.from)} is not in dispatch.accept`);
     return { ok: false, error: notAccepted(request?.from) };
   });
 

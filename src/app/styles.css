@@ -168,6 +168,17 @@ section.wide { max-width: none; }
 .form-field textarea { background: transparent; border: 1px solid hsl(var(--border)); border-radius: var(--radius); color: hsl(var(--foreground)); font: inherit; outline: none; padding: 8px 10px; resize: vertical; }
 .form-field textarea:focus { border-color: hsl(var(--primary)); }
 .form-field select:disabled { opacity: 0.7; }
+.settings-form { display: grid; gap: 12px; }
+.settings-form .panel { margin: 0; }
+.settings-repo .pr-title { font-size: 17px; }
+.settings-section { border: 1px solid hsl(var(--border)); gap: 14px; min-width: 0; }
+.settings-section h3 { font-size: 15px; margin: 0; }
+.settings-section:disabled { opacity: 0.75; }
+.settings-switch { align-items: flex-start; cursor: pointer; display: flex; gap: 10px; }
+.settings-switch input { flex-shrink: 0; height: 16px; margin-top: 2px; width: 16px; }
+.settings-switch > span { display: grid; gap: 2px; }
+.settings-switch strong { font-size: 14px; font-weight: 600; }
+.settings-actions { position: sticky; bottom: 0; background: hsl(var(--background)); padding: 10px 0; }
 .checkbox-field { align-items: center; display: flex; font-size: 14px; gap: 8px; }
 
 .raw-details { color: hsl(var(--muted-foreground)); margin-top: 6px; }

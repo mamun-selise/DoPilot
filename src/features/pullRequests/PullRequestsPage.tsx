@@ -1,5 +1,5 @@
 import { Check, ExternalLink, GitMerge, GitPullRequest, RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useT } from "../../lib/i18n/LocalizationProvider";
 import { ActionButton } from "../../shared/ui/ActionButton";
 import { Alert } from "../../shared/ui/Alert";
@@ -10,6 +10,7 @@ import { PageHeader } from "../../shared/ui/PageHeader";
 import { Skeleton } from "../../shared/ui/Skeleton";
 import { StatusPill } from "../../shared/ui/StatusPill";
 import type { HubStatus } from "../runners/useRunners";
+import { RepoPicker, useRepoSelection } from "./RepoPicker";
 import {
   useApprovePullRequest,
   useMergePullRequest,
@@ -28,25 +29,15 @@ const hubTone: Record<HubStatus, "good" | "warn" | "neutral"> = {
   unconfigured: "neutral"
 };
 
-const REPO_KEY = "blocks-app:prs-repo";
 const MERGE_METHOD_KEY = "blocks-app:prs-merge-method";
 
 export function PullRequestsPage() {
   const { t } = useT();
   const hub = usePullRequestHub();
-  const [repo, setRepo] = useState(() => localStorage.getItem(REPO_KEY) ?? "");
-  const [runnerId, setRunnerId] = useState("");
+  const selection = useRepoSelection(hub.repos);
+  const { route, selected } = selection;
   const [approving, setApproving] = useState<PullRequest | null>(null);
   const [merging, setMerging] = useState<PullRequest | null>(null);
-
-  // Keep the selection valid as runners come and go: fall back to the first repo, and to the first runner
-  // for it (the user's own runner comes first).
-  const selected = hub.repos.find((entry) => entry.github.toLowerCase() === repo.toLowerCase()) ?? hub.repos[0];
-  const route = selected?.runners.find((entry) => entry.runnerId === runnerId) ?? selected?.runners[0];
-
-  useEffect(() => {
-    if (selected) localStorage.setItem(REPO_KEY, selected.github);
-  }, [selected?.github]);
 
   const prs = useOpenPullRequests(hub.askGitHub, route, selected?.github, hub.status === "online");
 
@@ -81,20 +72,7 @@ export function PullRequestsPage() {
         <EmptyState icon={<GitPullRequest size={22} />} title={t("prs.noRepos.title")} description={t("prs.noRepos.body")} />
       ) : (
         <>
-          <div className="filter-grid prs-toolbar">
-            <label className="form-field">
-              <span>{t("prs.repository")}</span>
-              <select value={selected.github} onChange={(event) => { setRepo(event.target.value); setRunnerId(""); }}>
-                {hub.repos.map((entry) => <option key={entry.github} value={entry.github}>{entry.github}</option>)}
-              </select>
-            </label>
-            <label className="form-field">
-              <span>{t("prs.via")}</span>
-              <select value={route.runnerId} onChange={(event) => setRunnerId(event.target.value)} disabled={selected.runners.length < 2}>
-                {selected.runners.map((entry) => <option key={entry.runnerId} value={entry.runnerId}>{routeLabel(entry)}</option>)}
-              </select>
-            </label>
-          </div>
+          <RepoPicker repos={hub.repos} {...selection} selected={selected} route={route} />
 
           {prs.isError ? (
             <ErrorState message={prs.error.message} onRetry={() => void prs.refetch()} />
@@ -294,11 +272,6 @@ function Mergeability({ pr }: { pr: PullRequest }) {
   if (pr.mergeState === "BEHIND") return <StatusPill tone="warn">{t("prs.state.behind")}</StatusPill>;
   if (pr.mergeState === "UNSTABLE") return <StatusPill tone="warn">{t("prs.state.unstable")}</StatusPill>;
   return <span className="muted">{t("prs.state.unknown")}</span>;
-}
-
-function routeLabel(route: PullRequestRoute) {
-  const owner = route.owner.name || route.owner.email || route.owner.sub;
-  return `${route.runnerName} (${owner}${route.githubAccount ? ` · gh ${route.githubAccount}` : ""})`;
 }
 
 // t() has no parameters, so translated strings carry {name} placeholders filled here.

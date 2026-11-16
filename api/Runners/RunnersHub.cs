@@ -106,6 +106,18 @@ public sealed class RunnersHub(RunnerRegistry registry, UserDirectory users, ILo
         return AskGitHub(runnerId, github, new { action = "merge", repo = github, number, method, deleteBranch, from = CurrentUser });
     }
 
+    // ---- repository settings: read with gh api, saved with gh repo edit (kora 0.2.5+) ----
+
+    public Task<JsonElement> RepositorySettings(string runnerId, string github) =>
+        AskGitHub(runnerId, github, new { action = "settings", repo = github, from = CurrentUser });
+
+    /// <summary>changes holds only the changed fields; the runner maps them to gh repo edit flags and ignores the rest.</summary>
+    public Task<JsonElement> UpdateRepositorySettings(string runnerId, string github, JsonElement changes)
+    {
+        if (changes.ValueKind != JsonValueKind.Object) throw new HubException("Settings changes must be an object.");
+        return AskGitHub(runnerId, github, new { action = "editSettings", repo = github, changes, from = CurrentUser });
+    }
+
     /// <summary>Sends a gh request to the runner and waits for its answer ({ ok, error?, ... }).</summary>
     private async Task<JsonElement> AskGitHub(string runnerId, string github, object request)
     {
@@ -127,7 +139,7 @@ public sealed class RunnersHub(RunnerRegistry registry, UserDirectory users, ILo
         catch (Exception error) when (error is not HubException)
         {
             log.LogWarning("gh request to {Runner} failed: {Error}", runner.Id, error.Message);
-            throw new HubException($"Runner {runner.Registration.Name} could not run gh ({error.Message}). Pull requests need kora 0.2.3 or newer: run kora update there.");
+            throw new HubException($"Runner {runner.Registration.Name} could not run gh ({error.Message}). Pull requests need kora 0.2.3 or newer and repo settings 0.2.5: run kora update there.");
         }
     }
 

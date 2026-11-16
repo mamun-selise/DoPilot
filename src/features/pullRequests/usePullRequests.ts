@@ -32,7 +32,7 @@ export type PullRequest = {
 
 export type MergeMethod = "merge" | "squash" | "rebase";
 
-type GitHubAnswer = { ok: boolean; error?: string | null; pullRequests?: PullRequest[] };
+type GitHubAnswer = { ok: boolean; error?: string | null; pullRequests?: PullRequest[]; settings?: unknown };
 
 type State = { status: HubStatus; repos: PullRequestRepo[]; error?: string };
 
@@ -85,6 +85,8 @@ export function usePullRequestHub() {
     } catch (error) {
       throw new Error(describeHubError(error));
     }
+    // Runners older than the feature answer "Unknown pull request action".
+    if (/Unknown pull request action/.test(answer?.error ?? "")) throw new Error("This runner's KORA is too old for this. Run kora update on it and restart kora start.");
     if (!answer?.ok) throw new Error(answer?.error || "The runner could not complete the request.");
     return answer;
   }, []);

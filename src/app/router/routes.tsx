@@ -7,12 +7,14 @@ import { LoginPage } from "../../features/auth/LoginPage";
 import { NotFoundPage } from "../../features/auth/NotFoundPage";
 import { ProfilePage } from "../../features/profile/ProfilePage";
 import { PullRequestsPage } from "../../features/pullRequests/PullRequestsPage";
+import { RepoSettingsPage } from "../../features/repoSettings/RepoSettingsPage";
 import { RunnersPage } from "../../features/runners/RunnersPage";
 
 const protectedRoutes = {
   "/": ProfilePage,
   "/runners": RunnersPage,
   "/prs": PullRequestsPage,
+  "/repo-settings": RepoSettingsPage,
   "/error": ErrorPage
 };
 
