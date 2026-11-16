@@ -1,24 +1,18 @@
-// The web app's Release > Ready to stage board. Board state lives on GitHub as labels, so everyone sees the same
-// board and it survives restarts: READY marks column 2, DEPLOYED marks a merged PR whose build succeeded.
+// The web app's Release > Ready to stage board. Which column a PR is in is kept by the web app (Blocks Data), so moving
+// cards changes nothing on GitHub; this side reads PRs and runs the merge queue, and only the merges touch GitHub.
 import { gh, log, PR_FIELDS, summarize, who } from "./github.js";
 
-export const READY = "ready-for-stage";
-export const DEPLOYED = "deployed-to-stage";
-const LABELS = {
-  [READY]: { color: "0E8A16", description: "Queued for the next stage deployment (DoPilot)" },
-  [DEPLOYED]: { color: "1D76DB", description: "Merged and its build finished (DoPilot)" }
-};
 const MERGED_FIELDS = "number,title,url,author,headRefName,baseRefName,mergedAt,labels,mergeCommit";
 const POLL_MS = 15_000;
 const RUNS_APPEAR_MS = 3 * 60_000; // how long a merge commit may take to start its workflow runs
 const BUILD_TIMEOUT_MS = 90 * 60_000;
 
-// Open PRs (columns 1 and 2, split by READY) and merged PRs that went through the board (columns 3 and 4).
+// Open PRs, and recently merged ones so the web app can show the merged / deployed cards it keeps.
 export async function board(repo) {
   const open = JSON.parse(await gh(["pr", "list", "--repo", repo, "--state", "open", "--limit", "100", "--json", PR_FIELDS])).map(summarize);
   let merged = [];
   try {
-    merged = JSON.parse(await gh(["pr", "list", "--repo", repo, "--state", "merged", "--label", READY, "--limit", "40", "--json", MERGED_FIELDS])).map((pr) => ({
+    merged = JSON.parse(await gh(["pr", "list", "--repo", repo, "--state", "merged", "--limit", "100", "--json", MERGED_FIELDS])).map((pr) => ({
       number: pr.number,
       title: pr.title,
       url: pr.url,
@@ -30,18 +24,9 @@ export async function board(repo) {
       mergeCommit: pr.mergeCommit?.oid ?? null
     }));
   } catch {
-    // A repo that has never used the board has no READY label yet; nothing has been merged through it.
+    // Merged PRs only fill in details of cards the web app already has; the board works without them.
   }
   return { open, merged };
-}
-
-export async function setStage(repo, number, ready) {
-  if (ready) await ensureLabel(repo, READY);
-  await gh(["pr", "edit", String(number), "--repo", repo, ready ? "--add-label" : "--remove-label", READY]);
-}
-
-async function ensureLabel(repo, name) {
-  await gh(["label", "create", name, "--repo", repo, "--color", LABELS[name].color, "--description", LABELS[name].description, "--force"]);
 }
 
 // ---- the merge queue: one PR at a time, each waiting for the build on its merge commit ----
@@ -130,8 +115,6 @@ async function mergeOne(repo, number, method, deleteBranch, report) {
     await report({ number, state: "failed", commit: sha, runUrl: failed[0].url, runs: brief(runs) });
     throw new Error(`Build failed: ${failed.map((r) => `${r.workflowName || r.name} (${r.conclusion})`).join(", ")}.`);
   }
-  await ensureLabel(repo, DEPLOYED);
-  await gh(["pr", "edit", String(number), "--repo", repo, "--add-label", DEPLOYED]);
   await report({ number, state: "deployed", commit: sha, runUrl: runs[0].url, runs: brief(runs) });
   log(`  ✓ #${number} built: ${runs.map((r) => r.workflowName || r.name).join(", ")}`);
 }

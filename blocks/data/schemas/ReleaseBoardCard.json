@@ -1,0 +1,16 @@
+{
+  "schemaName": "ReleaseBoardCard",
+  "collectionName": "ReleaseBoardCards",
+  "schemaType": 1,
+  "description": "Release > Ready to stage board: a pull request moved past Open PRs (ready, merged or deployed), kept here so moving cards changes nothing on GitHub.",
+  "fields": [
+    { "name": "repo", "type": "String", "isArray": false },
+    { "name": "number", "type": "Int", "isArray": false },
+    { "name": "title", "type": "String", "isArray": false },
+    { "name": "url", "type": "String", "isArray": false },
+    { "name": "column", "type": "String", "isArray": false },
+    { "name": "position", "type": "Float", "isArray": false },
+    { "name": "commit", "type": "String", "isArray": false },
+    { "name": "movedBy", "type": "String", "isArray": false }
+  ]
+}

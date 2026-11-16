@@ -14,16 +14,8 @@ import { StatusPill } from "../../shared/ui/StatusPill";
 import { AddRepositoryButton, RepoPicker, useRepoSelection } from "../pullRequests/RepoPicker";
 import { usePullRequestHub, type MergeMethod, type PullRequest, type PullRequestRoute } from "../pullRequests/usePullRequests";
 import type { HubStatus } from "../runners/useRunners";
-import {
-  DEPLOYED_LABEL,
-  READY_LABEL,
-  useMergeQueue,
-  useReleaseBoard,
-  useSetReady,
-  type MergedPullRequest,
-  type MergeQueue,
-  type QueueItem
-} from "./useReleaseBoard";
+import { useBoardCards, useBoardChange, type BoardCard, type BoardColumn } from "./boardCards";
+import { useMergeQueue, useReleaseBoard, type MergedPullRequest, type MergeQueue, type QueueItem } from "./useReleaseBoard";
 
 const hubTone: Record<HubStatus, "good" | "warn" | "neutral"> = {
   online: "good",
@@ -34,7 +26,6 @@ const hubTone: Record<HubStatus, "good" | "warn" | "neutral"> = {
 };
 
 const MERGE_METHOD_KEY = "blocks-app:prs-merge-method"; // shared with the PRs page
-const orderKey = (repo: string) => `blocks-app:stage-order:${repo.toLowerCase()}`;
 
 type Hub = ReturnType<typeof usePullRequestHub>;
 
@@ -105,9 +96,9 @@ export function ReadyToStagePage() {
 
 function Board({ hub, merged, open, repo, route }: { hub: Hub; merged: MergedPullRequest[]; open: PullRequest[]; repo: string; route: PullRequestRoute }) {
   const { t } = useT();
-  const setReady = useSetReady(hub, route, repo);
+  const cardsQuery = useBoardCards(repo);
+  const change = useBoardChange(repo);
   const queue = useMergeQueue(hub, repo);
-  const [order, setOrder] = useState<number[]>(() => readOrder(repo));
   const [dragging, setDragging] = useState<number | null>(null);
   const [over, setOver] = useState<"open" | "ready" | null>(null);
   const [merging, setMerging] = useState(false);
@@ -116,36 +107,91 @@ function Board({ hub, merged, open, repo, route }: { hub: Hub; merged: MergedPul
   const inQueue = new Map((running?.items ?? []).map((item) => [item.number, item]));
   const lastQueueItems = new Map((queue?.items ?? []).map((item) => [item.number, item]));
 
-  const backlog = open.filter((pr) => !pr.labels.includes(READY_LABEL));
-  // Ready keeps the order the user set (merge order); new arrivals go to the end, oldest PR first.
-  const ready = useMemo(() => {
-    const rank = (n: number) => (order.includes(n) ? order.indexOf(n) : order.length + n / 1e9);
-    return open.filter((pr) => pr.labels.includes(READY_LABEL)).sort((a, b) => rank(a.number) - rank(b.number));
-  }, [open, order]);
-  const mergedOnly = merged.filter((pr) => !pr.labels.includes(DEPLOYED_LABEL));
-  const deployed = merged.filter((pr) => pr.labels.includes(DEPLOYED_LABEL));
+  const cards = cardsQuery.data ?? [];
+  const cardOf = new Map(cards.map((card) => [card.number, card]));
+  const openOf = new Map(open.map((pr) => [pr.number, pr]));
+  const mergedOf = new Map(merged.map((pr) => [pr.number, pr]));
+  const newest = (a: BoardCard, b: BoardCard) => (b.LastUpdatedDate ?? "").localeCompare(a.LastUpdatedDate ?? "");
 
+  const backlog = open.filter((pr) => cardOf.get(pr.number)?.column !== "ready");
+  // Ready keeps the order set on the board (the merge order), top first.
+  const readyCards = cards.filter((card) => card.column === "ready" && openOf.has(card.number)).sort((a, b) => a.position - b.position);
+  const ready = readyCards.map((card) => openOf.get(card.number)!);
+  // A Ready card whose PR got merged some other way counts as merged.
+  const mergedCards = cards.filter((card) => card.column === "merged" || (card.column === "ready" && mergedOf.has(card.number))).sort(newest);
+  const deployedCards = cards.filter((card) => card.column === "deployed").sort(newest).slice(0, 30);
+
+  const view = (card: BoardCard): MergedView => {
+    const pr = mergedOf.get(card.number);
+    return {
+      number: card.number,
+      title: pr?.title ?? card.title,
+      url: pr?.url ?? card.url,
+      author: pr?.author ?? null,
+      base: pr?.base ?? null,
+      mergedAt: pr?.mergedAt ?? null,
+      commit: card.commit ?? pr?.mergeCommit ?? null
+    };
+  };
+
+  // The merge queue reports each PR's progress; record merged / deployed on its card. Every watching browser does
+  // this and the result is the same, so it does not matter which one saves first.
   useEffect(() => {
-    try {
-      localStorage.setItem(orderKey(repo), JSON.stringify(order));
-    } catch {
-      // ordering is a convenience; the board works without it
+    if (!queue || !cardsQuery.data) return;
+    for (const item of queue.items) {
+      const column: BoardColumn | null =
+        item.state === "deployed" ? "deployed" : item.state === "building" || item.state === "merged" || (item.state === "failed" && item.commit) ? "merged" : null;
+      if (!column) continue;
+      const card = cardOf.get(item.number);
+      if (card?.ItemId.startsWith("pending-")) continue;
+      if (card && card.column === column && (!item.commit || card.commit === item.commit)) continue;
+      if (card) change.mutate({ kind: "update", card, patch: { column, commit: item.commit ?? card.commit } });
+      else change.mutate({ kind: "add", number: item.number, title: item.title, url: `https://github.com/${repo}/pull/${item.number}`, column, position: 0, movedBy: null });
     }
-  }, [order, repo]);
+  }, [queue, cardsQuery.data]);
 
   function move(number: number, toReady: boolean) {
     if (inQueue.has(number)) return;
-    if (toReady) setOrder((current) => [...current.filter((n) => n !== number), number]);
-    setReady.mutate({ number, ready: toReady });
+    const card = cardOf.get(number);
+    if (!toReady) {
+      if (card) change.mutate({ kind: "remove", card });
+      return;
+    }
+    const pr = openOf.get(number);
+    if (!pr) return;
+    const position = readyCards.reduce((max, entry) => Math.max(max, entry.position), 0) + 1;
+    if (card) change.mutate({ kind: "update", card, patch: { column: "ready", position, title: pr.title, url: pr.url } });
+    else change.mutate({ kind: "add", number, title: pr.title, url: pr.url, column: "ready", position, movedBy: null });
   }
 
+  // Swaps two neighbours; positions are re-numbered 1..n so the order stays exact after any number of moves.
   function shift(number: number, by: -1 | 1) {
-    const numbers = ready.map((pr) => pr.number);
-    const index = numbers.indexOf(number);
+    const order = readyCards.slice();
+    const index = order.findIndex((card) => card.number === number);
     const target = index + by;
-    if (target < 0 || target >= numbers.length) return;
-    [numbers[index], numbers[target]] = [numbers[target]!, numbers[index]!];
-    setOrder(numbers);
+    if (index < 0 || target < 0 || target >= order.length) return;
+    [order[index], order[target]] = [order[target]!, order[index]!];
+    order.forEach((card, i) => {
+      if (card.position !== i + 1 && !card.ItemId.startsWith("pending-")) change.mutate({ kind: "update", card, patch: { position: i + 1 } });
+    });
+  }
+
+  function markDeployed(card: BoardCard) {
+    change.mutate({ kind: "update", card, patch: { column: "deployed" } });
+  }
+
+  if (cardsQuery.isError) return <ErrorState message={cardsQuery.error.message} onRetry={() => void cardsQuery.refetch()} />;
+  if (cardsQuery.isPending) {
+    return (
+      <div className="stage-board">
+        {[0, 1, 2, 3].map((column) => (
+          <div className="stage-column" key={column}>
+            <Skeleton className="skeleton-line" />
+            <Skeleton className="skeleton-line-lg" />
+          </div>
+        ))}
+      </div>
+    );
   }
 
   const dropZone = (column: "open" | "ready") => ({
@@ -180,7 +226,7 @@ function Board({ hub, merged, open, repo, route }: { hub: Hub; merged: MergedPul
   return (
     <>
       {queue ? <QueuePanel hub={hub} queue={queue} /> : null}
-      {setReady.isError ? <Alert tone="error">{setReady.error.message}</Alert> : null}
+      {change.isError ? <Alert tone="error">{change.error.message}</Alert> : null}
 
       <div className="stage-board">
         <Column
@@ -233,12 +279,20 @@ function Board({ hub, merged, open, repo, route }: { hub: Hub; merged: MergedPul
           })}
         </Column>
 
-        <Column title={t("release.col.merged")} hint={t("release.col.mergedHint")} count={mergedOnly.length}>
-          {mergedOnly.map((pr) => <MergedCard key={pr.number} pr={pr} queueItem={lastQueueItems.get(pr.number)} />)}
+        <Column title={t("release.col.merged")} hint={t("release.col.mergedHint")} count={mergedCards.length}>
+          {mergedCards.map((card) => (
+            <MergedCard key={card.number} pr={view(card)} queueItem={lastQueueItems.get(card.number)}>
+              {inQueue.has(card.number) || card.ItemId.startsWith("pending-") ? null : (
+                <button className="icon-button card-action" onClick={() => markDeployed(card)} title={t("release.markDeployed")}>
+                  <CheckCircle2 size={15} />
+                </button>
+              )}
+            </MergedCard>
+          ))}
         </Column>
 
-        <Column title={t("release.col.deployed")} hint={t("release.col.deployedHint")} count={deployed.length}>
-          {deployed.map((pr) => <MergedCard key={pr.number} pr={pr} queueItem={lastQueueItems.get(pr.number)} />)}
+        <Column title={t("release.col.deployed")} hint={t("release.col.deployedHint")} count={deployedCards.length}>
+          {deployedCards.map((card) => <MergedCard key={card.number} pr={view(card)} queueItem={lastQueueItems.get(card.number)} />)}
         </Column>
       </div>
       <p className="muted prs-identity">{fill(t("prs.identity"), { account: route.githubAccount ?? "?", runner: route.runnerName })}</p>
@@ -320,17 +374,25 @@ function Card({
   );
 }
 
-function MergedCard({ pr, queueItem }: { pr: MergedPullRequest; queueItem?: QueueItem }) {
+// A merged / deployed card: details from GitHub when the PR is among the recently merged, else what the card saved.
+type MergedView = { number: number; title: string; url: string; author: string | null; base: string | null; mergedAt: string | null; commit: string | null };
+
+function MergedCard({ children, pr, queueItem }: { children?: ReactNode; pr: MergedView; queueItem?: QueueItem }) {
   return (
     <article className="stage-card locked">
-      <a href={pr.url} target="_blank" rel="noreferrer" className="stage-card-title">
-        <span className="muted">#{pr.number}</span> {pr.title} <ExternalLink size={12} />
-      </a>
+      <div className="stage-card-top">
+        <a href={pr.url} target="_blank" rel="noreferrer" className="stage-card-title">
+          <span className="muted">#{pr.number}</span> {pr.title} <ExternalLink size={12} />
+        </a>
+        {children ? <div className="stage-card-actions">{children}</div> : null}
+      </div>
       <span className="muted mono-sm">
-        {pr.base}
-        {pr.mergeCommit ? ` @ ${pr.mergeCommit.slice(0, 7)}` : ""}
+        {pr.base ?? ""}
+        {pr.commit ? ` @ ${pr.commit.slice(0, 7)}` : ""}
       </span>
-      <span className="muted">{pr.author ?? "—"} · {new Date(pr.mergedAt).toLocaleString()}</span>
+      {pr.author || pr.mergedAt ? (
+        <span className="muted">{pr.author ?? "—"}{pr.mergedAt ? ` · ${new Date(pr.mergedAt).toLocaleString()}` : ""}</span>
+      ) : null}
       {queueItem ? <QueueState item={queueItem} /> : null}
     </article>
   );
@@ -478,15 +540,6 @@ function MergeQueueDialog({ hub, onClose, prs, repo, route }: { hub: Hub; onClos
       </div>
     </Modal>
   );
-}
-
-function readOrder(repo: string): number[] {
-  try {
-    const saved = JSON.parse(localStorage.getItem(orderKey(repo)) ?? "[]");
-    return Array.isArray(saved) ? saved.filter((n): n is number => Number.isInteger(n)) : [];
-  } catch {
-    return [];
-  }
 }
 
 // t() has no parameters, so translated strings carry {name} placeholders filled here.

@@ -212,14 +212,10 @@ public sealed partial class RunnersHub(RunnerRegistry registry, ReleaseQueues qu
         return AskGitHub(runnerId, github, new { action = "deployEnv", repo = github, deployment, from = CurrentUser });
     }
 
-    // ---- Release > Ready to stage (kora 0.2.8+). The board lives on GitHub as labels; merge queues run on a runner ----
+    // ---- Release > Ready to stage (kora 0.2.8+). The web app keeps the board (Blocks Data); merge queues run on a runner ----
 
     public Task<JsonElement> ReleaseBoard(string runnerId, string github) =>
         AskGitHub(runnerId, github, new { action = "board", repo = github, from = CurrentUser });
-
-    /// <summary>Moves a PR between "Open" and "Ready to stage" by adding or removing its ready-for-stage label.</summary>
-    public Task<JsonElement> SetReadyForStage(string runnerId, string github, int number, bool ready) =>
-        AskGitHub(runnerId, github, new { action = "stage", repo = github, number, ready, from = CurrentUser });
 
     /// <summary>Joins the repository's board group for MergeQueueChanged, and returns its latest queue.</summary>
     public async Task<ReleaseQueueView?> WatchRelease(string github)

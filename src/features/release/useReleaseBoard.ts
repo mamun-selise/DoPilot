@@ -1,12 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import type { KoraUser } from "../runners/useRunners";
 import type { PullRequest, PullRequestRoute, usePullRequestHub } from "../pullRequests/usePullRequests";
 
-// The board lives on GitHub as labels (kora/lib/release.js): READY puts an open PR in "Ready to stage", DEPLOYED
-// moves a merged one from "Merged" to "Deployed".
-export const READY_LABEL = "ready-for-stage";
-export const DEPLOYED_LABEL = "deployed-to-stage";
+// What the runner reads from GitHub for the board: open PRs, and recently merged ones for the details of merged /
+// deployed cards. Which column a PR is in is kept in Blocks Data (boardCards.ts).
 
 export type MergedPullRequest = {
   number: number;
@@ -60,32 +58,6 @@ export function useReleaseBoard(hub: Hub, route: PullRequestRoute | undefined, r
     retry: false,
     staleTime: 30_000,
     refetchInterval: 60_000
-  });
-}
-
-// Moves a PR between "Open" and "Ready to stage". The card moves at once; the board is re-read afterwards.
-export function useSetReady(hub: Hub, route: PullRequestRoute | undefined, repo: string | undefined) {
-  const queryClient = useQueryClient();
-  const key = boardKey(route, repo);
-  return useMutation({
-    mutationFn: ({ number, ready }: { number: number; ready: boolean }) => hub.askGitHub("SetReadyForStage", route!.runnerId, repo!, number, ready),
-    onMutate: async ({ number, ready }) => {
-      await queryClient.cancelQueries({ queryKey: key });
-      const before = queryClient.getQueryData<ReleaseBoard>(key);
-      if (before) {
-        queryClient.setQueryData<ReleaseBoard>(key, {
-          ...before,
-          open: before.open.map((pr) =>
-            pr.number !== number ? pr : { ...pr, labels: ready ? [...new Set([...pr.labels, READY_LABEL])] : pr.labels.filter((label) => label !== READY_LABEL) }
-          )
-        });
-      }
-      return { before };
-    },
-    onError: (_error, _variables, context) => {
-      if (context?.before) queryClient.setQueryData(key, context.before);
-    },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: key })
   });
 }
 

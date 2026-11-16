@@ -178,7 +178,6 @@ export const defaultDictionary = {
   "nav.release": "Release",
   "nav.release.stage": "Ready to stage",
   "release.stage.title": "Ready to stage deployment",
-  "release.stage.subtitle": "Drag pull requests to Ready to stage, then merge them one at a time: each waits for the build on its merge commit before the next.",
   "release.col.open": "Open PRs",
   "release.col.openHint": "Drag to Ready to stage",
   "release.col.ready": "Ready to stage",
@@ -279,6 +278,8 @@ export const defaultDictionary = {
   "prs.search.total": "{total} pull requests",
   "prs.search.none": "No pull requests match",
   "prs.search.noneBody": "Nothing matches “{search}”. Try fewer words, a PR number, or an author.",
+  "release.markDeployed": "Mark as deployed (when the build is known to have finished)",
+  "release.stage.subtitle": "Drag pull requests to Ready to stage, then merge them one at a time: each waits for the build on its merge commit before the next. Moving cards changes nothing on GitHub.",
   "notFound.title": "404",
   "notFound.message": "This page does not exist.",
   "notFound.home": "Back home"

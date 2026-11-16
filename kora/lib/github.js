@@ -7,7 +7,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import YAML from "yaml";
 import { home, isDeployment, paths } from "./config.js";
 import { deployEnvironment, environments } from "./environments.js";
-import { board, setStage } from "./release.js";
+import { board } from "./release.js";
 
 export const PR_FIELDS = [
   "number", "title", "url", "author", "isDraft", "headRefName", "baseRefName", "createdAt", "updatedAt",
@@ -44,7 +44,6 @@ export async function github(request, runner) {
   else if (request.action === "environments") log(`  ✓ ${answer.environments.services.length} service(s) read ${took}`);
   else if (request.action === "deployEnv") log(`  ✓ ${answer.deployment.merged ? "merged" : "opened"} ${answer.deployment.title} ${took}`);
   else if (request.action === "board") log(`  ✓ board: ${answer.board.open.length} open, ${answer.board.merged.length} merged ${took}`);
-  else if (request.action === "stage") log(`  ✓ ${request.ready ? "marked ready for stage" : "moved back to open"} ${took}`);
   else if (request.action === "editSettings") log(`  ✓ ${answer.changed ? `updated: ${answer.changed}` : "nothing to change"} ${took}`);
   else log(`  ✓ ${request.action === "approve" ? "approved" : `merged (${request.method})`} ${took}`);
   return answer;
@@ -78,10 +77,6 @@ async function handle(request, runner) {
     const number = Number(request.number);
     if (!Number.isInteger(number) || number <= 0) return { ok: false, error: "A pull request number is required." };
 
-    if (request.action === "stage") {
-      await setStage(repo, number, Boolean(request.ready));
-      return { ok: true };
-    }
     if (request.action === "approve") {
       const body = typeof request.body === "string" && request.body.trim() ? ["--body", request.body.trim()] : [];
       await gh(["pr", "review", String(number), "--repo", repo, "--approve", ...body]);
