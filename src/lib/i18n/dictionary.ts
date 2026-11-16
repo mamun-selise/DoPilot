@@ -1,5 +1,5 @@
 export const defaultDictionary = {
-  "app.name": "Blocks App",
+  "app.name": "KORA – Knowledge & Orchestration Runtime Agent",
   "nav.profile": "Profile",
   "nav.logout": "Log out",
   "auth.welcome": "Welcome back",
@@ -271,6 +271,14 @@ export const defaultDictionary = {
   "env.submit.merge": "Open and merge",
   "env.done.opened": "Pull request opened; approve and merge it on Deploy to stage / prod:",
   "env.done.merged": "Merged; the deploy workflow is running:",
+  "app.short": "KORA",
+  "app.tagline": "Knowledge & Orchestration Runtime Agent",
+  "prs.search.placeholder": "Search by #, title, author, branch or label",
+  "prs.search.clear": "Clear search",
+  "prs.search.count": "{shown} of {total} pull requests",
+  "prs.search.total": "{total} pull requests",
+  "prs.search.none": "No pull requests match",
+  "prs.search.noneBody": "Nothing matches “{search}”. Try fewer words, a PR number, or an author.",
   "notFound.title": "404",
   "notFound.message": "This page does not exist.",
   "notFound.home": "Back home"

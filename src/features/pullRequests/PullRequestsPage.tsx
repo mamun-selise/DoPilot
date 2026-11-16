@@ -1,4 +1,4 @@
-import { Check, ExternalLink, GitMerge, GitPullRequest, RefreshCw, Rocket } from "lucide-react";
+import { Check, ExternalLink, GitMerge, GitPullRequest, RefreshCw, Rocket, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useT } from "../../lib/i18n/LocalizationProvider";
 import type { TranslationKey } from "../../lib/i18n/dictionary";
@@ -66,7 +66,9 @@ export function PullRequestsView({ variant }: { variant: PullRequestsVariant }) 
     () => (variant === "code" ? query.data : query.data?.filter((pr) => TITLE_MATCH[variant].test(pr.title))),
     [query.data, variant]
   );
-  const prs = { ...query, data: shown };
+  const [search, setSearch] = useState("");
+  const found = useMemo(() => (shown ? shown.filter((pr) => matches(pr, search)) : shown), [shown, search]);
+  const prs = { ...query, data: found };
 
   return (
     <section className="wide">
@@ -106,6 +108,27 @@ export function PullRequestsView({ variant }: { variant: PullRequestsVariant }) 
         <>
           <RepoPicker hub={hub} {...selection} selected={selected} route={route} />
 
+          {shown && shown.length > 0 ? (
+            <div className="toolbar">
+              <label className="search-box">
+                <Search size={16} className="muted" />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={t("prs.search.placeholder")}
+                  aria-label={t("prs.search.placeholder")}
+                />
+                {search ? (
+                  <button className="icon-button search-clear" onClick={() => setSearch("")} aria-label={t("prs.search.clear")}>
+                    <X size={14} />
+                  </button>
+                ) : null}
+              </label>
+              <span className="muted">{search ? fill(t("prs.search.count"), { shown: found?.length ?? 0, total: shown.length }) : fill(t("prs.search.total"), { total: shown.length })}</span>
+            </div>
+          ) : null}
+
           {prs.isError ? (
             <ErrorState message={prs.error.message} onRetry={() => void prs.refetch()} />
           ) : prs.isPending || !prs.data ? (
@@ -114,6 +137,13 @@ export function PullRequestsView({ variant }: { variant: PullRequestsVariant }) 
               <Skeleton className="skeleton-line" />
               <Skeleton className="skeleton-line" />
             </div>
+          ) : prs.data.length === 0 && search ? (
+            <EmptyState
+              icon={<Search size={22} />}
+              title={t("prs.search.none")}
+              description={fill(t("prs.search.noneBody"), { search })}
+              action={<button className="icon-button" onClick={() => setSearch("")}>{t("prs.search.clear")}</button>}
+            />
           ) : prs.data.length === 0 ? (
             <EmptyState icon={<Icon size={22} />} title={t(text.empty)} description={fill(t(text.emptyBody), { repo: selected.github })} />
           ) : (
@@ -304,6 +334,14 @@ function Mergeability({ pr }: { pr: PullRequest }) {
   if (pr.mergeState === "BEHIND") return <StatusPill tone="warn">{t("prs.state.behind")}</StatusPill>;
   if (pr.mergeState === "UNSTABLE") return <StatusPill tone="warn">{t("prs.state.unstable")}</StatusPill>;
   return <span className="muted">{t("prs.state.unknown")}</span>;
+}
+
+// Every word must appear in the PR's number, title, author, branches or labels ("#12", "12", "fix login", "dependabot").
+function matches(pr: PullRequest, search: string) {
+  const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const haystack = [`#${pr.number}`, pr.title, pr.author ?? "", pr.head, pr.base, ...pr.labels, pr.isDraft ? "draft" : ""].join(" ").toLowerCase();
+  return words.every((word) => haystack.includes(word));
 }
 
 // t() has no parameters, so translated strings carry {name} placeholders filled here.

@@ -75,7 +75,10 @@ export function AppShell({ activePath, children, onNavigate }: { activePath: str
           {collapsed ? null : (
             <a className="brand" href="/" onClick={(event) => { event.preventDefault(); onNavigate("/"); }}>
               <span className="brand-mark"><Activity size={16} /></span>
-              <span>Blocks App</span>
+              <span className="brand-text">
+                <span>{t("app.short")}</span>
+                <small>{t("app.tagline")}</small>
+              </span>
             </a>
           )}
           {/* Hidden on mobile by CSS (nothing to toggle -- the rail is always
