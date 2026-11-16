@@ -120,22 +120,40 @@ public sealed partial class RunnersHub(RunnerRegistry registry, UserDirectory us
         return AskGitHub(runnerId, github, new { action = "editSettings", repo = github, changes, from = CurrentUser });
     }
 
-    // ---- repositories added from the web app: GitHub only, saved in the runner's runner.yml (kora 0.2.6+) ----
+    // ---- repositories added from the web app, saved in the runner's runner.yml: GitHub only (kora 0.2.6+) ----
 
     /// <summary>The caller's own runners: the ones they may add repositories to.</summary>
     public IReadOnlyList<PullRequestRoute> OwnRunners() => registry.OwnRunners(CurrentUser);
 
-    public Task<JsonElement> AddRepository(string runnerId, string github) => ManageRepository(runnerId, "add", github.Trim());
+    public Task<JsonElement> AddRepository(string runnerId, string github) =>
+        ManageRepository(runnerId, new { action = "add", repo = CheckRepoName(github.Trim()), from = CurrentUser });
 
-    public Task<JsonElement> RemoveRepository(string runnerId, string github) => ManageRepository(runnerId, "remove", github);
+    public Task<JsonElement> RemoveRepository(string runnerId, string github) =>
+        ManageRepository(runnerId, new { action = "remove", repo = CheckRepoName(github), from = CurrentUser });
 
-    private Task<JsonElement> ManageRepository(string runnerId, string action, string github)
+    // ---- local clones on the runner's machine, like the FE/BE repos kora init sets up (kora 0.2.7+) ----
+
+    /// <summary>Git folders the runner found near its clones and in the usual code folders, for the add dialog to offer.</summary>
+    public Task<JsonElement> LocalRepositoryCandidates(string runnerId) =>
+        ManageRepository(runnerId, new { action = "candidates", from = CurrentUser });
+
+    /// <summary>The runner checks the folder is a git clone, reads its GitHub remote and saves it in runner.yml.</summary>
+    public Task<JsonElement> AddLocalRepository(string runnerId, string path, string? key)
     {
-        if (!RepoName().IsMatch(github)) throw new HubException("Use owner/name, for example selise/deploy-config.");
-        var runner = registry.Get(runnerId) ?? throw new HubException("That runner is offline.");
-        if (runner.Owner.Sub != CurrentUser.Sub) throw new HubException("Only the runner's owner can add or remove its repositories.");
-        return AskRunner(runner, "ManageRepository", new { action, repo = github, from = CurrentUser });
+        if (string.IsNullOrWhiteSpace(path)) throw new HubException("Enter the folder of the clone on the runner's machine.");
+        return ManageRepository(runnerId, new { action = "addLocal", path = path.Trim(), key = key?.Trim(), from = CurrentUser });
     }
+
+    /// <summary>What a runner offers is its owner's to change, so only the owner may.</summary>
+    private Task<JsonElement> ManageRepository(string runnerId, object request)
+    {
+        var runner = registry.Get(runnerId) ?? throw new HubException("That runner is offline.");
+        if (runner.Owner.Sub != CurrentUser.Sub) throw new HubException("Only the runner's owner can change its repositories.");
+        return AskRunner(runner, "ManageRepository", request);
+    }
+
+    private static string CheckRepoName(string github) =>
+        RepoName().IsMatch(github) ? github : throw new HubException("Use owner/name, for example selise/deploy-config.");
 
     [System.Text.RegularExpressions.GeneratedRegex(@"^[\w.-]+/[\w.-]+$")]
     private static partial System.Text.RegularExpressions.Regex RepoName();
@@ -166,7 +184,7 @@ public sealed partial class RunnersHub(RunnerRegistry registry, UserDirectory us
         catch (Exception error) when (error is not HubException)
         {
             log.LogWarning("gh request to {Runner} failed: {Error}", runner.Id, error.Message);
-            throw new HubException($"Runner {runner.Registration.Name} could not answer ({error.Message}). It may need a newer kora (PRs 0.2.3, repo settings 0.2.5, adding repositories 0.2.6): run kora update there and restart kora start.");
+            throw new HubException($"Runner {runner.Registration.Name} could not answer ({error.Message}). It may need a newer kora (PRs 0.2.3, repo settings 0.2.5, adding repositories 0.2.6, local clones 0.2.7): run kora update there and restart kora start.");
         }
     }
 

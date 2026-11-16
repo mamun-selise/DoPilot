@@ -33,7 +33,7 @@ export type PullRequest = {
 
 export type MergeMethod = "merge" | "squash" | "rebase";
 
-type GitHubAnswer = { ok: boolean; error?: string | null; pullRequests?: PullRequest[]; settings?: unknown; github?: string };
+type GitHubAnswer = { ok: boolean; error?: string | null; pullRequests?: PullRequest[]; settings?: unknown; github?: string | null; candidates?: unknown };
 
 // ownRunners: the user's own runners, the ones they may add repositories to.
 type State = { status: HubStatus; repos: PullRequestRepo[]; ownRunners: PullRequestRoute[]; error?: string };

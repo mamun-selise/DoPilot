@@ -1,7 +1,9 @@
 // Pull requests and repository settings for the web app's PRs and Repo settings pages, done with this machine's
 // gh login (`gh auth login`).
-import { execFile } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFile, execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
 import YAML from "yaml";
 import { home, paths } from "./config.js";
 
@@ -185,6 +187,89 @@ export async function removeRepository(request, runner) {
   }
   log(answer.ok ? `  ✓ removed "${answer.key}" from runner.yml` : `  ✗ failed: ${answer.error}`);
   return answer;
+}
+
+// ---- local clones added from the web app, like the FE/BE repos kora init sets up ----
+
+// Git folders next to the clones runner.yml already has, in the home folder and in the usual code folders under it,
+// that runner.yml does not list yet.
+const CODE_FOLDERS = ["source/repos", "repos", "code", "projects", "src", "dev", "git", "GitHub", "Documents/GitHub", "workspace"];
+
+export function localCandidates(runner) {
+  log("Repo candidates — scanning for local clones");
+  const clones = Object.values(runner.repos ?? {}).filter((repo) => repo.path).map((repo) => resolve(repo.path));
+  const known = new Set(clones.map((path) => path.toLowerCase())); // Windows paths are case-insensitive
+  const roots = new Set([...clones.map((path) => dirname(path)), homedir(), ...CODE_FOLDERS.map((folder) => join(homedir(), folder))]);
+  const found = new Map();
+  for (const root of roots) {
+    let entries = [];
+    try {
+      entries = readdirSync(root, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      const path = join(root, entry.name);
+      if (known.has(path.toLowerCase()) || found.has(path.toLowerCase()) || !existsSync(join(path, ".git"))) continue;
+      found.set(path.toLowerCase(), { path, github: githubRemote(path) });
+      if (found.size >= 100) break;
+    }
+  }
+  const candidates = [...found.values()].sort((a, b) => a.path.localeCompare(b.path));
+  log(`  ✓ ${candidates.length} local clone(s) found`);
+  return { ok: true, candidates };
+}
+
+// Adds a clone on this machine, as kora init does. A GitHub-only entry for the same repository gets the path instead.
+export async function addLocalRepository(request, runner) {
+  log(`Repo add local ${request?.path} — requested by ${who(request?.from)}`);
+  let answer;
+  try {
+    const path = resolve(String(request?.path ?? "").trim().replace(/^["']|["']$/g, ""));
+    if (!request?.path || !existsSync(path) || !statSync(path).isDirectory()) throw new Error(`Folder not found on this machine: ${path}`);
+    if (!git(["-C", path, "rev-parse", "--git-dir"])) throw new Error(`Not a git repository: ${path}`);
+    const same = Object.keys(runner.repos ?? {}).find((key) => runner.repos[key].path && resolve(runner.repos[key].path).toLowerCase() === path.toLowerCase());
+    if (same) throw new Error(`${path} is already in runner.yml as "${same}".`);
+
+    const github = githubRemote(path);
+    const upgrade = github ? findRepo(runner, github) : null;
+    if (upgrade && runner.repos[upgrade].path) throw new Error(`${github} is already in runner.yml as "${upgrade}" (${runner.repos[upgrade].path}).`);
+    const wanted = String(request?.key ?? "").trim();
+    if (wanted && !/^[a-z0-9][a-z0-9-]*$/.test(wanted)) throw new Error("A key uses lowercase letters, numbers and hyphens, for example fe or be.");
+    if (!upgrade && wanted && runner.repos?.[wanted]) throw new Error(`The key "${wanted}" is already used in runner.yml.`);
+    const key = upgrade ?? (wanted || uniqueKey(runner, basename(path)));
+
+    const entry = github ? { path, github } : { path };
+    editRunnerYml((doc) => {
+      if (!YAML.isMap(doc.get("repos"))) doc.set("repos", doc.createNode({}));
+      const node = doc.createNode(entry);
+      node.flow = true;
+      doc.setIn(["repos", key], node);
+    });
+    runner.repos = { ...(runner.repos ?? {}), [key]: entry };
+    answer = { ok: true, key, github, path, upgraded: Boolean(upgrade) };
+  } catch (error) {
+    answer = { ok: false, error: error.message };
+  }
+  log(answer.ok
+    ? `  ✓ ${answer.upgraded ? "linked the clone to" : "added"} "${answer.key}": ${answer.path}${answer.github ? ` (${answer.github})` : " (no GitHub remote)"}`
+    : `  ✗ failed: ${answer.error}`);
+  return answer;
+}
+
+// Same rule kora init uses: the origin remote, when it points at GitHub.
+function githubRemote(path) {
+  return git(["-C", path, "remote", "get-url", "origin"])?.match(/github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?$/)?.[1] ?? null;
+}
+
+// No shell: paths come from the web app.
+function git(args) {
+  try {
+    return execFileSync("git", args, { stdio: ["ignore", "pipe", "ignore"], encoding: "utf8" }).trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 function findRepo(runner, github) {

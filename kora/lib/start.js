@@ -7,7 +7,7 @@ import { createInterface } from "node:readline";
 import * as signalR from "@microsoft/signalr";
 import { accessToken, session } from "./auth.js";
 import { loadRunner, paths, pkg, source } from "./config.js";
-import { addRepository, github, log, removeRepository, who } from "./github.js";
+import { addLocalRepository, addRepository, github, localCandidates, log, removeRepository, who } from "./github.js";
 
 export async function start() {
   const runner = loadRunner();
@@ -54,7 +54,11 @@ export async function start() {
       log(`Repo ${request?.action} ${request?.repo} — refused: ${who(request?.from)} is not this runner's owner`);
       return { ok: false, error: "Only the runner's owner can add or remove its repositories." };
     }
-    const answer = request.action === "remove" ? await removeRepository(request, runner) : await addRepository(request, runner);
+    if (request.action === "candidates") return localCandidates(runner);
+    const answer =
+      request.action === "remove" ? await removeRepository(request, runner)
+      : request.action === "addLocal" ? await addLocalRepository(request, runner)
+      : await addRepository(request, runner);
     // Re-register once this answer is on its way, so the web app's repository list picks up the change.
     if (answer.ok) setTimeout(() => register().catch(() => {}), 0);
     return answer;

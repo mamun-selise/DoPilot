@@ -44,6 +44,11 @@ Repositories you don't have cloned (for example the one you deploy from) can be 
 GitHub-only entry, `name: { github: owner/name }`, with no `path`. Pull requests and settings work on it; tasks
 need a clone, so they are refused. Only the runner's owner can add or remove these.
 
+**Add repository → Local clone** (kora 0.2.7+) adds a clone that is already on this machine, the same way
+`kora init` adds FE and BE: pick one of the git folders KORA finds next to your clones and in the usual code
+folders, or type the path. It is saved as `key: { path, github }` and takes tasks too. Picking the clone of a
+GitHub-only repository gives that entry its path.
+
 ## Update
 
 ```sh

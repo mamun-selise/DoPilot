@@ -1,4 +1,4 @@
-import { Plus, Trash2 } from "lucide-react";
+import { Cloud, FolderGit2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useT } from "../../lib/i18n/LocalizationProvider";
 import { Alert } from "../../shared/ui/Alert";
@@ -95,22 +95,46 @@ function parseRepo(text: string) {
   return match?.[1] ?? null;
 }
 
+type Candidate = { path: string; github: string | null };
+
 function AddRepositoryDialog({ hub, onAdded, onClose }: { hub: Hub; onAdded: (github: string) => void; onClose: () => void }) {
   const { t } = useT();
+  const [source, setSource] = useState<"local" | "github">("local");
   const [text, setText] = useState("");
+  const [path, setPath] = useState("");
+  const [key, setKey] = useState("");
   const [runnerId, setRunnerId] = useState(hub.ownRunners[0]?.runnerId ?? "");
+  const [candidates, setCandidates] = useState<Candidate[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const repo = parseRepo(text);
   const runner = hub.ownRunners.find((entry) => entry.runnerId === runnerId) ?? hub.ownRunners[0];
+  const picked = candidates?.find((candidate) => candidate.path === path);
+
+  // The runner suggests git folders near its clones; asked again when another runner is picked.
+  useEffect(() => {
+    if (source !== "local" || !runner) return;
+    let cancelled = false;
+    setCandidates(null);
+    hub
+      .askGitHub("LocalRepositoryCandidates", runner.runnerId)
+      .then((answer) => !cancelled && setCandidates((answer.candidates as Candidate[] | undefined) ?? []))
+      .catch(() => !cancelled && setCandidates([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [source, runner?.runnerId]);
 
   async function add() {
-    if (!repo || !runner) return;
+    if (!runner) return;
     setBusy(true);
     setError(null);
     try {
-      const answer = await hub.askGitHub("AddRepository", runner.runnerId, repo);
-      onAdded(String(answer.github ?? repo));
+      const answer =
+        source === "local"
+          ? await hub.askGitHub("AddLocalRepository", runner.runnerId, path, key || null)
+          : await hub.askGitHub("AddRepository", runner.runnerId, repo);
+      if (answer.github) onAdded(String(answer.github));
       onClose();
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));
@@ -131,12 +155,15 @@ function AddRepositoryDialog({ hub, onAdded, onClose }: { hub: Hub; onAdded: (gi
             void add();
           }}
         >
-          <p>{t("repos.add.body")}</p>
-          <label className="form-field">
-            <span>{t("repos.add.repo")}</span>
-            <input autoFocus value={text} onChange={(event) => setText(event.target.value)} placeholder="owner/name" />
-          </label>
-          {text && !repo ? <Alert tone="error">{t("repos.add.invalid")}</Alert> : null}
+          <div className="segmented" role="tablist">
+            <button type="button" role="tab" aria-selected={source === "local"} className={source === "local" ? "active" : ""} onClick={() => setSource("local")}>
+              <FolderGit2 size={15} /> {t("repos.add.local")}
+            </button>
+            <button type="button" role="tab" aria-selected={source === "github"} className={source === "github" ? "active" : ""} onClick={() => setSource("github")}>
+              <Cloud size={15} /> {t("repos.add.githubOnly")}
+            </button>
+          </div>
+
           <label className="form-field">
             <span>{t("repos.add.runner")}</span>
             <select value={runner?.runnerId} onChange={(event) => setRunnerId(event.target.value)}>
@@ -147,10 +174,57 @@ function AddRepositoryDialog({ hub, onAdded, onClose }: { hub: Hub; onAdded: (gi
               ))}
             </select>
           </label>
+
+          {source === "local" ? (
+            <>
+              <p>{t("repos.add.localBody")}</p>
+              <div className="form-field">
+                <span>{t("repos.add.found")}</span>
+                <div className="candidate-list">
+                  {candidates === null ? (
+                    <span className="muted">{t("repos.add.scanning")}</span>
+                  ) : candidates.length === 0 ? (
+                    <span className="muted">{t("repos.add.noneFound")}</span>
+                  ) : (
+                    candidates.map((candidate) => (
+                      <button
+                        type="button"
+                        key={candidate.path}
+                        className={`candidate${candidate.path === path ? " active" : ""}`}
+                        onClick={() => setPath(candidate.path)}
+                      >
+                        <strong className="mono-sm">{candidate.path}</strong>
+                        <span className="muted">{candidate.github ?? t("runners.repo.noRemote")}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+              <label className="form-field">
+                <span>{t("repos.add.path")}</span>
+                <input value={path} onChange={(event) => setPath(event.target.value)} placeholder="D:\code\my-fe" />
+              </label>
+              <label className="form-field">
+                <span>{t("repos.add.key")}</span>
+                <input value={key} onChange={(event) => setKey(event.target.value.toLowerCase())} placeholder={t("repos.add.keyPlaceholder")} />
+              </label>
+              {picked && !picked.github ? <Alert tone="info">{t("repos.add.noRemoteNote")}</Alert> : null}
+            </>
+          ) : (
+            <>
+              <p>{t("repos.add.body")}</p>
+              <label className="form-field">
+                <span>{t("repos.add.repo")}</span>
+                <input autoFocus value={text} onChange={(event) => setText(event.target.value)} placeholder="owner/name" />
+              </label>
+              {text && !repo ? <Alert tone="error">{t("repos.add.invalid")}</Alert> : null}
+            </>
+          )}
+
           {error ? <Alert tone="error">{error}</Alert> : null}
           <div className="modal-actions">
             <button type="button" className="icon-button" onClick={onClose}>{t("common.cancel")}</button>
-            <button type="submit" className="primary-button" disabled={!repo || busy}>
+            <button type="submit" className="primary-button" disabled={busy || (source === "local" ? !path.trim() : !repo)}>
               <Plus size={16} /> {busy ? t("prs.working") : t("repos.add")}
             </button>
           </div>
