@@ -16,12 +16,12 @@ import { usePullRequestHub, type PullRequestRoute } from "../pullRequests/usePul
 import type { HubStatus } from "../runners/useRunners";
 
 // Mirrors kora/lib/environments.js.
-type Entry = { image: string; tag: string; sha: string | null; build: number | null; version: string | null; suffix: string | null };
+export type Entry = { image: string; tag: string; sha: string | null; build: number | null; version: string | null; suffix: string | null };
 type EnvState = { path: string; deployedAt: string | null; current: Entry | null; history: Entry[]; total: number };
 type Env = "dev" | "stg" | "production";
 type Service = { name: string; envs: Partial<Record<Env, EnvState>> };
-type Environments = { branch: string; services: Service[] };
-type Deployment = { url: string; number: number; title: string; merged: boolean };
+export type Environments = { branch: string; services: Service[] };
+export type Deployment = { url: string; number: number; title: string; merged: boolean };
 
 const ENV_LABEL: Record<Env, string> = { dev: "Dev", stg: "Stage", production: "Prod" };
 
@@ -337,12 +337,12 @@ function DeployDialog({
   );
 }
 
-function uniqueImages(entries: Entry[]) {
+export function uniqueImages(entries: Entry[]) {
   const seen = new Set<string>();
   return entries.filter((entry) => (seen.has(entry.image) ? false : (seen.add(entry.image), true)));
 }
 
-function label(entry: Entry) {
+export function label(entry: Entry) {
   return entry.version ?? (entry.build ? `build ${entry.build}` : entry.tag.slice(0, 12));
 }
 

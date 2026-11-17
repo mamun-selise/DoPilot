@@ -1,5 +1,6 @@
 import { Check, ExternalLink, GitMerge, GitPullRequest, RefreshCw, Rocket, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useT } from "../../lib/i18n/LocalizationProvider";
 import type { TranslationKey } from "../../lib/i18n/dictionary";
 import { ActionButton } from "../../shared/ui/ActionButton";
@@ -51,7 +52,8 @@ export function PullRequestsPage() {
   return <PullRequestsView variant="code" />;
 }
 
-export function PullRequestsView({ variant }: { variant: PullRequestsVariant }) {
+// top: shown under the repository picker (Quick deploy on the Deploy pages).
+export function PullRequestsView({ top, variant }: { top?: (context: { hub: ReturnType<typeof usePullRequestHub>; repo: string; route: PullRequestRoute }) => ReactNode; variant: PullRequestsVariant }) {
   const { t } = useT();
   const hub = usePullRequestHub();
   const selection = useRepoSelection(hub.repos, variant === "code" ? "code" : "deployment");
@@ -107,6 +109,7 @@ export function PullRequestsView({ variant }: { variant: PullRequestsVariant }) 
       ) : (
         <>
           <RepoPicker hub={hub} {...selection} selected={selected} route={route} />
+          {top?.({ hub, repo: selected.github, route })}
 
           {shown && shown.length > 0 ? (
             <div className="toolbar">

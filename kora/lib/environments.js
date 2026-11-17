@@ -30,11 +30,12 @@ export async function environments(repo) {
   return { branch, services };
 }
 
-// request: { service, env: "stg" | "production", kind: "promote" | "rollback", image, merge }
+// request: { service, env: "stg" | "production", kind: "promote" | "rollback" | "deploy", image, merge }
+// "deploy" (Quick deploy, kora 0.2.13+) takes any image the service has run in dev, stage or prod.
 export async function deployEnvironment(repo, request, from) {
   const { service, env, kind, image } = request;
   if (!TITLE_ENV[env]) throw new Error("Only stage and production are deployed through PRs.");
-  if (!["promote", "rollback"].includes(kind)) throw new Error(`Unknown deployment kind "${kind}".`);
+  if (!["promote", "rollback", "deploy"].includes(kind)) throw new Error(`Unknown deployment kind "${kind}".`);
 
   // Re-read what is there now, so the PR matches the repository and not what the page showed earlier.
   const branch = await defaultBranch(repo);
@@ -52,15 +53,22 @@ export async function deployEnvironment(repo, request, from) {
     if (!sourcePath) throw new Error(`${service} has no ${source} file to promote from.`);
     const sourceCurrent = parseEntries(await readFile(repo, sourcePath, branch))[0];
     if (!sourceCurrent || sourceCurrent.image !== image) throw new Error(`${source} of ${service} has moved on since the page loaded; refresh and try again.`);
-  } else if (!entries.some((entry) => entry.image === image)) {
+  } else if (kind === "rollback" && !entries.some((entry) => entry.image === image)) {
     throw new Error(`${image} is not in the ${env} history of ${service}.`);
+  } else if (kind === "deploy") {
+    const known = await Promise.all(
+      ENVIRONMENTS.filter((name) => files[service]?.[name]).map(async (name) =>
+        name === env ? entries : parseEntries(await readFile(repo, files[service][name], branch))
+      )
+    );
+    if (!known.flat().some((entry) => entry.image === image)) throw new Error(`${image} has never run in any environment of ${service}.`);
   }
   if (current?.image === image) throw new Error(`${env} of ${service} already runs ${describe(parseImage(image))}.`);
 
   const target = parseImage(image);
   const label = target.version ?? target.build ?? target.sha?.slice(0, 7) ?? "image";
   const name = service.charAt(0).toUpperCase() + service.slice(1);
-  const title = kind === "promote" ? `${name} - Deploy to ${TITLE_ENV[env]} - ${label}` : `${name} - Rollback ${TITLE_ENV[env]} to ${label}`;
+  const title = kind !== "rollback" ? `${name} - Deploy to ${TITLE_ENV[env]} - ${label}` : `${name} - Rollback ${TITLE_ENV[env]} to ${label}`;
   const prBranch = await freeBranch(repo, `${service}-${BRANCH_ENV[env]}-${kind === "rollback" ? "rollback-" : ""}${target.build ?? Date.now()}`);
   const newline = text.includes("\r\n") ? "\r\n" : "\n";
   const content = `${text}${text === "" || text.endsWith("\n") ? "" : newline}${image}${newline}`;
@@ -73,12 +81,12 @@ export async function deployEnvironment(repo, request, from) {
     input: JSON.stringify({ message: title, content: Buffer.from(content, "utf8").toString("base64"), sha: file.sha, branch: prBranch })
   });
   const body = [
-    `${kind === "promote" ? "Promotes" : "Rolls back"} **${service}** on **${TITLE_ENV[env]}**`,
+    `${kind === "rollback" ? "Rolls back" : kind === "deploy" ? "Deploys" : "Promotes"} **${service}** on **${TITLE_ENV[env]}**`,
     "",
     `- from: \`${current?.image ?? "nothing"}\``,
     `- to: \`${image}\``,
     "",
-    `Opened from DoPilot (Release > Environments) for ${from?.email || from?.sub || "unknown"}. Merging deploys it.`
+    `Opened from KORA (Release > ${kind === "deploy" ? "Quick deploy" : "Environments"}) for ${from?.email || from?.sub || "unknown"}. Merging deploys it.`
   ].join("\n");
   const url = (await gh(["pr", "create", "--repo", repo, "--base", branch, "--head", prBranch, "--title", title, "--body", body])).trim();
   const number = Number(url.split("/").pop());

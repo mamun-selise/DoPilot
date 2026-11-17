@@ -68,6 +68,11 @@ ahead of dev, and prod of stage. **Promote** and **Rollback** open a deploy PR i
 `webservice-stg-1992`, title `Webservice - Deploy to STAGE - v1.349.0`) that appends the chosen image line; merging it
 runs that environment's deploy workflow. The runner re-reads the repo first and refuses stale or unknown images.
 
+**Quick deploy** (kora 0.2.13+), at the top of Deploy to stage / Deploy to prod, lists the ticked services
+(webservice, webhost and webclient by default) with the newest version (what dev runs) chosen; any version the service
+has run anywhere can be picked instead. One button opens a deploy PR per service, and merges it when *Merge right away*
+is ticked.
+
 ## Update
 
 ```sh

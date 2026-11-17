@@ -359,3 +359,15 @@ tbody tr:last-child td { border-bottom: 0; }
   .pagination { align-items: stretch; flex-direction: column; }
   .pagination-controls { justify-content: space-between; }
 }
+.quick-deploy h2 { align-items: center; display: flex; font-size: 16px; gap: 8px; margin: 0; }
+.quick-head { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
+.chip-toggle { border: 1px solid transparent; cursor: pointer; }
+.chip-toggle input { margin: 0; }
+.chip-toggle.on { background: hsl(var(--primary) / 0.12); border-color: hsl(var(--primary) / 0.4); color: hsl(var(--primary)); }
+.quick-table td { vertical-align: middle; }
+.quick-pick { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+.quick-pick select { max-width: 100%; min-width: 0; }
+.quick-badge { background: hsl(var(--success-bg)); border-radius: 999px; color: hsl(var(--success-fg)); font-size: 12px; font-weight: 700; padding: 3px 9px; }
+.quick-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+.quick-actions .checkbox-field { margin-right: auto; }
+.error-text { color: hsl(var(--destructive)); font-size: 13px; }
