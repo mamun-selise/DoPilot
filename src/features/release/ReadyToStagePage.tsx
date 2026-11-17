@@ -25,7 +25,7 @@ const hubTone: Record<HubStatus, "good" | "warn" | "neutral"> = {
   unconfigured: "neutral"
 };
 
-const MERGE_METHOD_KEY = "blocks-app:prs-merge-method"; // shared with the PRs page
+const MERGE_METHOD_KEY = "blocks-app:merge-method"; // shared with the PRs page
 
 type Hub = ReturnType<typeof usePullRequestHub>;
 
@@ -483,8 +483,8 @@ function QueuePanel({ hub, queue }: { hub: Hub; queue: MergeQueue }) {
 
 function MergeQueueDialog({ hub, onClose, prs, repo, route }: { hub: Hub; onClose: () => void; prs: PullRequest[]; repo: string; route: PullRequestRoute }) {
   const { t } = useT();
-  const [method, setMethod] = useState<MergeMethod>(() => (localStorage.getItem(MERGE_METHOD_KEY) as MergeMethod | null) ?? "squash");
-  const [deleteBranch, setDeleteBranch] = useState(true);
+  const [method, setMethod] = useState<MergeMethod>(() => (localStorage.getItem(MERGE_METHOD_KEY) as MergeMethod | null) ?? "merge");
+  const [deleteBranch, setDeleteBranch] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const blocked = prs.filter((pr) => pr.isDraft || pr.mergeable === "CONFLICTING");
@@ -521,8 +521,8 @@ function MergeQueueDialog({ hub, onClose, prs, repo, route }: { hub: Hub; onClos
       <label className="form-field">
         <span>{t("prs.merge.method")}</span>
         <select value={method} onChange={(event) => setMethod(event.target.value as MergeMethod)}>
-          <option value="squash">{t("prs.merge.squash")}</option>
           <option value="merge">{t("prs.merge.commit")}</option>
+          <option value="squash">{t("prs.merge.squash")}</option>
           <option value="rebase">{t("prs.merge.rebase")}</option>
         </select>
       </label>

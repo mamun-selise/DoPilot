@@ -31,7 +31,8 @@ const hubTone: Record<HubStatus, "good" | "warn" | "neutral"> = {
   unconfigured: "neutral"
 };
 
-const MERGE_METHOD_KEY = "blocks-app:prs-merge-method";
+// Merge commit and keep the branch unless chosen otherwise; a new key so an old "squash" choice is not picked up.
+const MERGE_METHOD_KEY = "blocks-app:merge-method";
 
 // "code": the PRs page, code repositories, every open PR. "stage" / "prod": the Release > Deploy pages, deployment
 // (yml) repositories only, and only the PRs whose title names that environment (they all target the same branch).
@@ -273,8 +274,8 @@ function ApproveDialog({ askGitHub, onClose, pr, repo, route }: DialogProps) {
 function MergeDialog({ askGitHub, onClose, pr, repo, route }: DialogProps) {
   const { t } = useT();
   const merge = useMergePullRequest(askGitHub);
-  const [method, setMethod] = useState<MergeMethod>(() => (localStorage.getItem(MERGE_METHOD_KEY) as MergeMethod | null) ?? "squash");
-  const [deleteBranch, setDeleteBranch] = useState(true);
+  const [method, setMethod] = useState<MergeMethod>(() => (localStorage.getItem(MERGE_METHOD_KEY) as MergeMethod | null) ?? "merge");
+  const [deleteBranch, setDeleteBranch] = useState(false);
 
   function confirm() {
     localStorage.setItem(MERGE_METHOD_KEY, method);
@@ -291,8 +292,8 @@ function MergeDialog({ askGitHub, onClose, pr, repo, route }: DialogProps) {
       <label className="form-field">
         <span>{t("prs.merge.method")}</span>
         <select value={method} onChange={(event) => setMethod(event.target.value as MergeMethod)}>
-          <option value="squash">{t("prs.merge.squash")}</option>
           <option value="merge">{t("prs.merge.commit")}</option>
+          <option value="squash">{t("prs.merge.squash")}</option>
           <option value="rebase">{t("prs.merge.rebase")}</option>
         </select>
       </label>
