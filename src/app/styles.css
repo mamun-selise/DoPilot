@@ -225,6 +225,7 @@ section.wide { max-width: none; }
 .repo-picker-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
 .prs-toolbar { grid-template-columns: minmax(220px, 360px) minmax(220px, 420px); }
 .prs-table td { vertical-align: middle; }
+.dashboard-heading { font-size: 15px; margin: 20px 0 10px; }
 .pr-title { align-items: center; display: inline-flex; flex-wrap: wrap; font-weight: 600; gap: 4px; }
 .pr-title:hover { color: hsl(var(--primary)); }
 .mono-sm { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }

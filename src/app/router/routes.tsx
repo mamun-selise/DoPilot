@@ -6,6 +6,7 @@ import { ErrorPage } from "../../features/auth/ErrorPage";
 import { LoginPage } from "../../features/auth/LoginPage";
 import { NotFoundPage } from "../../features/auth/NotFoundPage";
 import { ProfilePage } from "../../features/profile/ProfilePage";
+import { PullRequestsDashboardPage } from "../../features/pullRequests/PullRequestsDashboardPage";
 import { PullRequestsPage } from "../../features/pullRequests/PullRequestsPage";
 import { RepoSettingsPage } from "../../features/repoSettings/RepoSettingsPage";
 import { ReadyToStagePage } from "../../features/release/ReadyToStagePage";
@@ -15,6 +16,7 @@ import { RunnersPage } from "../../features/runners/RunnersPage";
 
 const protectedRoutes = {
   "/": ProfilePage,
+  "/dashboard": PullRequestsDashboardPage,
   "/runners": RunnersPage,
   "/prs": PullRequestsPage,
   "/repo-settings": RepoSettingsPage,

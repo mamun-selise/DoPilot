@@ -313,7 +313,7 @@ function MergeDialog({ askGitHub, onClose, pr, repo, route }: DialogProps) {
   );
 }
 
-function Checks({ checks }: { checks: PullRequest["checks"] }) {
+export function Checks({ checks }: { checks: PullRequest["checks"] }) {
   const { t } = useT();
   if (checks.failed) return <StatusPill tone="warn">{fill(t("prs.checks.failed"), { count: checks.failed })}</StatusPill>;
   if (checks.pending) return <StatusPill tone="neutral">{fill(t("prs.checks.pending"), { count: checks.pending })}</StatusPill>;
@@ -321,7 +321,7 @@ function Checks({ checks }: { checks: PullRequest["checks"] }) {
   return <span className="muted">{t("prs.checks.none")}</span>;
 }
 
-function Review({ decision }: { decision: PullRequest["reviewDecision"] }) {
+export function Review({ decision }: { decision: PullRequest["reviewDecision"] }) {
   const { t } = useT();
   if (decision === "APPROVED") return <StatusPill tone="good">{t("prs.review.approved")}</StatusPill>;
   if (decision === "CHANGES_REQUESTED") return <StatusPill tone="warn">{t("prs.review.changes")}</StatusPill>;
@@ -329,7 +329,7 @@ function Review({ decision }: { decision: PullRequest["reviewDecision"] }) {
   return <span className="muted">—</span>;
 }
 
-function Mergeability({ pr }: { pr: PullRequest }) {
+export function Mergeability({ pr }: { pr: PullRequest }) {
   const { t } = useT();
   if (pr.isDraft) return <StatusPill tone="neutral">{t("prs.draft")}</StatusPill>;
   if (pr.mergeable === "CONFLICTING") return <StatusPill tone="warn">{t("prs.state.conflicts")}</StatusPill>;
@@ -349,11 +349,11 @@ function matches(pr: PullRequest, search: string) {
 }
 
 // t() has no parameters, so translated strings carry {name} placeholders filled here.
-function fill(text: string, values: Record<string, string | number>) {
+export function fill(text: string, values: Record<string, string | number>) {
   return text.replace(/\{(\w+)\}/g, (match, name: string) => (name in values ? String(values[name]) : match));
 }
 
-function since(iso: string) {
+export function since(iso: string) {
   const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
   if (minutes < 1) return "just now";
   if (minutes < 60) return `${minutes} min ago`;

@@ -1,4 +1,4 @@
-import { CloudUpload, GitCompareArrows, GitPullRequest, Layers, Rocket, Server, Settings2, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
+import { CloudUpload, GitCompareArrows, GitPullRequest, Layers, LayoutDashboard, Rocket, Server, Settings2, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
 import type { TranslationKey } from "../../lib/i18n/dictionary";
 
 export type NavLink = { href: string; labelKey: TranslationKey; icon: LucideIcon };
@@ -7,6 +7,7 @@ export type NavGroup = { id: string; labelKey: TranslationKey; icon: LucideIcon;
 
 export const navItems: (NavLink | NavGroup)[] = [
   { href: "/", labelKey: "nav.profile", icon: UserRound },
+  { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
   { href: "/runners", labelKey: "nav.runners", icon: Server },
   { href: "/prs", labelKey: "nav.prs", icon: GitPullRequest },
   { href: "/repo-settings", labelKey: "nav.repoSettings", icon: Settings2 },
