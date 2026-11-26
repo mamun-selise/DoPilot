@@ -38,7 +38,7 @@ const MERGE_METHOD_KEY = "blocks-app:merge-method";
 // (yml) repositories only, and only the PRs whose title names that environment (they all target the same branch).
 export type PullRequestsVariant = "code" | "stage" | "prod";
 
-const TITLE_MATCH: Record<Exclude<PullRequestsVariant, "code">, RegExp> = {
+export const TITLE_MATCH: Record<Exclude<PullRequestsVariant, "code">, RegExp> = {
   stage: /\bstag(e|ing)\b/i,
   prod: /\bprod(uction)?\b/i
 };

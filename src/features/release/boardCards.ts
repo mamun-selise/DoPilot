@@ -36,8 +36,11 @@ async function listCards(repo: string): Promise<BoardCard[]> {
   return all.filter((card) => card.repo === repoKey(repo));
 }
 
+// Also used by the dashboard (useQueries over every repository), so both share one cache entry per board.
+export const boardCardsQuery = (repo: string) => ({ queryKey: queryKey(repo), queryFn: () => listCards(repo), staleTime: 15_000, refetchInterval: 30_000 });
+
 export function useBoardCards(repo: string) {
-  return useQuery({ queryKey: queryKey(repo), queryFn: () => listCards(repo), staleTime: 15_000, refetchInterval: 30_000 });
+  return useQuery(boardCardsQuery(repo));
 }
 
 type Change =
